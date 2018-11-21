@@ -16,6 +16,8 @@ public class JniCameraCall {
 	public static native int[] getOetf(float maxDst, float minDst);
 	public static native int[] getMaxMin(float maxDst, float minDst);
 	*/
+	public static native void openDevice();
+	public static native void closeDevice();
 	public static native int[] getFormat();
 }
 

@@ -88,6 +88,7 @@ public class RockchipCamera2 extends Activity {
         public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
             //open your camera here
             Log.d(TAG,"onSurfaceTextureAvailable");
+			JniCameraCall.openDevice();
             openCamera();
         }
         @Override
@@ -98,6 +99,7 @@ public class RockchipCamera2 extends Activity {
         @Override
         public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
             Log.d(TAG,"onSurfaceTextureDestroyed");
+			JniCameraCall.closeDevice();
             return false;
         }
         @Override

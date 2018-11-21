@@ -34,29 +34,19 @@
 #define LOGE(msg,...)   ALOGE("%s(%d): " msg ,__FUNCTION__,__LINE__,##__VA_ARGS__)
 #define LOGD(msg,...)   ALOGD("%s(%d): " msg ,__FUNCTION__,__LINE__,##__VA_ARGS__)
 
+static int camFd;
 static void getDeviceFormat(int *format) {
 	int i;
-	char video_name[64];
-
-	memset(video_name, 0, sizeof(video_name));
-	strcat(video_name, "/dev/v4l-subdev2");
-
-    int camFd = open(video_name, O_RDWR);
-    if(camFd<0)
-        LOGE("open %s failed,erro=%s",video_name,strerror(errno));
-    else
-        LOGD("open %s success,fd=%d",video_name,camFd);
-
 
 	struct v4l2_queryctrl mPowerPresent;
 	memset(&mPowerPresent, 0, sizeof(struct v4l2_queryctrl));
 	mPowerPresent.id = V4L2_CID_DV_RX_POWER_PRESENT;
 	if (!ioctl(camFd, VIDIOC_QUERYCTRL, &mPowerPresent)) {
-		ALOGD("xcq----success,name=%s,min=%d,max=%d,flags=%d,default_value=%d",
+		ALOGD("query success,name=%s,min=%d,max=%d,flags=%d,default_value=%d",
 			mPowerPresent.name,mPowerPresent.minimum,mPowerPresent.maximum,
 			mPowerPresent.flags,mPowerPresent.default_value);
 	}else{
-		ALOGD("xcq----failed");
+		ALOGD("query RX power present failed");
 	}
 
 	struct v4l2_control control;
@@ -89,27 +79,46 @@ static jintArray getFormat(JNIEnv *env, jobject thiz)
 	(void)thiz;
 	jintArray array = env->NewIntArray(3);
 	jint *result = new jint[3];
-	//makeMaxMin(1200, 0.02, maxDst, minDst, result);
 	getDeviceFormat(result);
 	env->SetIntArrayRegion(array, 0, 3, result);
 	delete[] result;
 	return array;
 }
 
+static void openDevice(JNIEnv *env, jobject thiz)
+{
+	(void)*env;
+	(void)thiz;
+
+	char video_name[64];
+	memset(video_name, 0, sizeof(video_name));
+	strcat(video_name, "/dev/v4l-subdev2");
+
+    camFd = open(video_name, O_RDWR);
+    if(camFd < 0) {
+        LOGE("open %s failed,erro=%s",video_name,strerror(errno));
+    } else {
+        LOGD("open %s success,fd=%d",video_name,camFd);
+	}
+}
+
+static void closeDevice(JNIEnv *env, jobject thiz)
+{
+	(void)*env;
+	(void)thiz;
+	LOGD("close device");
+	if(camFd > 0) {
+		close(camFd);
+	}
+}
+
 
 static const char *classPathName = "com/android/rockchip/camera2/util/JniCameraCall";
 
 static JNINativeMethod methods[] = {
-	/*
-	{"get", "(DD)[I", (void *)get},
-	{"getOther", "(DD)[I", (void *)getOther},
-	{"isSupportHDR", "()Z", (void *)isSupportHDR},
-	{"setHDREnable", "(I)V", (void *)setHDREnable},
-	{"getEetf", "(FF)[I", (void *)getEetf},
-	{"getOetf", "(FF)[I", (void *)getOetf},
-	{"getMaxMin", "(FF)[I", (void *)getMaxMin},
-	*/
 	{"getFormat", "()[I", (void *)getFormat},
+	{"openDevice", "()V", (void *)openDevice},
+	{"closeDevice", "()V", (void *)closeDevice},
 };
 
 /*
