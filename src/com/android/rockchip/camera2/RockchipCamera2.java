@@ -1,4 +1,4 @@
-package com.rockchip.camera2;
+package com.android.rockchip.camera2;
 
 import android.Manifest;
 import android.content.Context;
@@ -41,6 +41,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import com.android.rockchip.camera2.util.JniCameraCall;
+
 
 public class RockchipCamera2 extends Activity {
 
@@ -101,6 +103,15 @@ public class RockchipCamera2 extends Activity {
         @Override
         public void onSurfaceTextureUpdated(SurfaceTexture surface) {
             //Log.d(TAG,"onSurfaceTextureUpdated");
+            int width = 0;
+			int height = 0;
+            int[] format = JniCameraCall.getFormat();
+            if (format != null && format.length > 0) {
+				width = format[0];
+				height = format[1];
+            }
+			Log.d(TAG,"width = "+width+",height = "+height);
+
         }
     };
 
