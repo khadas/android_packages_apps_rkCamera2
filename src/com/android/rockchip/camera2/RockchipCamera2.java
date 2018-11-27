@@ -2,6 +2,9 @@ package com.android.rockchip.camera2;
 
 import android.Manifest;
 import android.content.Context;
+import android.content.ComponentName;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
@@ -17,6 +20,7 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -30,8 +34,10 @@ import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.Toast;
+import android.widget.RelativeLayout;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -42,7 +48,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import com.android.rockchip.camera2.util.JniCameraCall;
-
 
 public class RockchipCamera2 extends Activity {
 
@@ -65,15 +70,16 @@ public class RockchipCamera2 extends Activity {
     private static final int REQUEST_CAMERA_PERMISSION = 200;
     private Handler mBackgroundHandler;
     private HandlerThread mBackgroundThread;
+    private HdmiService mHdmiService;
+    private RelativeLayout rootView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_rockchip_camera2);
-        textureView = (TextureView)findViewById(R.id.texture);
-        assert textureView != null;
-        textureView.setSurfaceTextureListener(textureListener);
-        Button takePictureButton = (Button)findViewById(R.id.btn_takepicture);
+        rootView = (RelativeLayout) findViewById(R.id.root_view);
+        Button takePictureButton = (Button) findViewById(R.id.btn_takepicture);
+        JniCameraCall.openDevice();
         assert takePictureButton != null;
         takePictureButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -81,38 +87,91 @@ public class RockchipCamera2 extends Activity {
                 takePicture();
             }
         });
+        createTextureView();
+        assert textureView != null;
+    }
+
+    private void createTextureView() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Log.i(TAG, "textureView remove");
+                if (textureView != null) {
+                    rootView.removeView(textureView);
+                    textureView = null;
+                }
+                textureView = new TextureView(RockchipCamera2.this);
+                RelativeLayout.LayoutParams layoutParams = new RelativeLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+                layoutParams.addRule(RelativeLayout.ABOVE, R.id.btn_takepicture);
+                textureView.setLayoutParams(layoutParams);
+                rootView.addView(textureView, 0);
+                textureView.setSurfaceTextureListener(textureListener);
+            }
+        });
     }
 
     TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-            //open your camera here
-            Log.d(TAG,"onSurfaceTextureAvailable");
-			JniCameraCall.openDevice();
-            openCamera();
+            // open your camera here
+            Log.d(TAG, "onSurfaceTextureAvailable");
+            // openCamera();
+            Intent hdmiService = new Intent(RockchipCamera2.this, HdmiService.class);
+            hdmiService.setPackage(getPackageName());
+            bindService(hdmiService, conn, Context.BIND_AUTO_CREATE);
         }
+
         @Override
         public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
-            Log.d(TAG,"onSurfaceTextureSizeChanged");
+            Log.d(TAG, "onSurfaceTextureSizeChanged");
             // Transform you image captured size according to the surface width and height
         }
+
         @Override
         public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-            Log.d(TAG,"onSurfaceTextureDestroyed");
-			JniCameraCall.closeDevice();
-            return false;
+            Log.d(TAG, "onSurfaceTextureDestroyed");
+            return true;
         }
+
         @Override
         public void onSurfaceTextureUpdated(SurfaceTexture surface) {
-            //Log.d(TAG,"onSurfaceTextureUpdated");
-            int width = 0;
-			int height = 0;
-            int[] format = JniCameraCall.getFormat();
-            if (format != null && format.length > 0) {
-				width = format[0];
-				height = format[1];
-            }
-			Log.d(TAG,"width = "+width+",height = "+height);
+            // Log.d(TAG,"onSurfaceTextureUpdated");
+            /*
+             * int width = 0; int height = 0; int[] format = JniCameraCall.getFormat(); if
+             * (format != null && format.length > 0) { width = format[0]; height =
+             * format[1]; } Log.d(TAG,"width = "+width+",height = "+height);
+             */
+
+        }
+    };
+
+    ServiceConnection conn = new ServiceConnection() {
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            Log.i(TAG, "onServiceDisconnected");
+        }
+
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            Log.i(TAG, "onServiceConnected");
+            // 返回一个HdmiService对象
+            mHdmiService = ((HdmiService.HdmiBinder) service).getService();
+
+            // 注册回调接口来接收HDMI的变化
+            mHdmiService.setOnHdmiStatusListener(new HdmiService.OnHdmiStatusListener() {
+
+                @Override
+                public void onHdmiStatusChange(boolean isHdmiIn) {
+                    Log.i(TAG, "onHdmiStatusChange isHdmiIn = " + isHdmiIn);
+                    if (isHdmiIn) {
+                        openCamera();
+                    } else {
+                        closeCamera();
+                    }
+                }
+            });
 
         }
     };
@@ -120,33 +179,35 @@ public class RockchipCamera2 extends Activity {
     private final CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
         @Override
         public void onOpened(CameraDevice camera) {
-            //This is called when the camera is open
+            // This is called when the camera is open
             Log.d(TAG, "onOpened");
             cameraDevice = camera;
             createCameraPreview();
         }
+
         @Override
         public void onDisconnected(CameraDevice camera) {
-            Log.d(TAG,"onDisconnected");
+            Log.d(TAG, "onDisconnected");
             cameraDevice.close();
         }
+
         @Override
         public void onError(CameraDevice camera, int error) {
+            Log.i(TAG, "onError");
             cameraDevice.close();
             cameraDevice = null;
         }
     };
 
-    final CameraCaptureSession.CaptureCallback captureCallbackListener =
-            new CameraCaptureSession.CaptureCallback() {
-                @Override
-                public void onCaptureCompleted(CameraCaptureSession session,
-                                               CaptureRequest request, TotalCaptureResult result) {
-                    super.onCaptureCompleted(session, request, result);
-                    Toast.makeText(RockchipCamera2.this, "Saved:" + file, Toast.LENGTH_SHORT).show();
-                    createCameraPreview();
-                }
-            };
+    final CameraCaptureSession.CaptureCallback captureCallbackListener = new CameraCaptureSession.CaptureCallback() {
+        @Override
+        public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request,
+                TotalCaptureResult result) {
+            super.onCaptureCompleted(session, request, result);
+            Toast.makeText(RockchipCamera2.this, "Saved:" + file, Toast.LENGTH_SHORT).show();
+            createCameraPreview();
+        }
+    };
 
     protected void startBackgroundThread() {
         mBackgroundThread = new HandlerThread("Camera Background");
@@ -166,7 +227,7 @@ public class RockchipCamera2 extends Activity {
     }
 
     protected void takePicture() {
-        if(null == cameraDevice) {
+        if (null == cameraDevice) {
             Log.e(TAG, "cameraDevice is null");
             return;
         }
@@ -175,8 +236,8 @@ public class RockchipCamera2 extends Activity {
             CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraDevice.getId());
             Size[] jpegSizes = null;
             if (characteristics != null) {
-                jpegSizes = characteristics.get(
-                        CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.JPEG);
+                jpegSizes = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                        .getOutputSizes(ImageFormat.JPEG);
             }
             int width = 640;
             int height = 480;
@@ -184,21 +245,21 @@ public class RockchipCamera2 extends Activity {
                 width = jpegSizes[0].getWidth();
                 height = jpegSizes[0].getHeight();
             }
-            //width = 1280;
-            //height = 720;
-            Log.d(TAG,"pic size W="+width+",H="+height);
+            // width = 1280;
+            // height = 720;
+            Log.d(TAG, "pic size W=" + width + ",H=" + height);
             ImageReader reader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1);
             List<Surface> outputSurfaces = new ArrayList<Surface>(2);
             outputSurfaces.add(reader.getSurface());
             outputSurfaces.add(new Surface(textureView.getSurfaceTexture()));
-            final CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(
-                    CameraDevice.TEMPLATE_STILL_CAPTURE);
+            final CaptureRequest.Builder captureBuilder = cameraDevice
+                    .createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             captureBuilder.addTarget(reader.getSurface());
             captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
             // Orientation
             int rotation = getWindowManager().getDefaultDisplay().getRotation();
             captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATIONS.get(rotation));
-            final File file = new File(Environment.getExternalStorageDirectory()+"/pic.jpg");
+            final File file = new File(Environment.getExternalStorageDirectory() + "/pic.jpg");
             ImageReader.OnImageAvailableListener readerListener = new ImageReader.OnImageAvailableListener() {
                 @Override
                 public void onImageAvailable(ImageReader reader) {
@@ -219,6 +280,7 @@ public class RockchipCamera2 extends Activity {
                         }
                     }
                 }
+
                 private void save(byte[] bytes) throws IOException {
                     OutputStream output = null;
                     try {
@@ -234,7 +296,8 @@ public class RockchipCamera2 extends Activity {
             reader.setOnImageAvailableListener(readerListener, mBackgroundHandler);
             final CameraCaptureSession.CaptureCallback captureListener = new CameraCaptureSession.CaptureCallback() {
                 @Override
-                public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result) {
+                public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request,
+                        TotalCaptureResult result) {
                     super.onCaptureCompleted(session, request, result);
                     Toast.makeText(RockchipCamera2.this, "Saved:" + file, Toast.LENGTH_SHORT).show();
                     createCameraPreview();
@@ -249,6 +312,7 @@ public class RockchipCamera2 extends Activity {
                         e.printStackTrace();
                     }
                 }
+
                 @Override
                 public void onConfigureFailed(CameraCaptureSession session) {
                 }
@@ -260,35 +324,35 @@ public class RockchipCamera2 extends Activity {
 
     protected void createCameraPreview() {
         try {
-            Log.d(TAG,"createCameraPreview");
+            Log.d(TAG, "createCameraPreview");
             SurfaceTexture texture = textureView.getSurfaceTexture();
             assert texture != null;
-            Log.d(TAG,"imageDimension.getWidth()="+imageDimension.getWidth() +
-                    ",imageDimension.getHeight()="+imageDimension.getHeight());
+            Log.d(TAG, "imageDimension.getWidth()=" + imageDimension.getWidth() + ",imageDimension.getHeight()="
+                    + imageDimension.getHeight());
             texture.setDefaultBufferSize(imageDimension.getWidth(), imageDimension.getHeight());
-            //texture.setDefaultBufferSize(1280,720);
+            // texture.setDefaultBufferSize(1280,720);
             Surface surface = new Surface(texture);
             captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             captureRequestBuilder.addTarget(surface);
-            cameraDevice.createCaptureSession(Arrays.asList(surface),
-                    new CameraCaptureSession.StateCallback(){
-                        @Override
-                        public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
-                            //The camera is already closed
-                            if (null == cameraDevice) {
-                                return;
-                            }
-                            Log.d(TAG,"onConfigured");
-                            // When the session is ready, we start displaying the preview.
-                            cameraCaptureSessions = cameraCaptureSession;
-                            updatePreview();
-                        }
-                        @Override
-                        public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
-                            Toast.makeText(RockchipCamera2.this, "Configuration change",
-                                    Toast.LENGTH_SHORT).show();
-                        }
-                    }, null);
+            cameraDevice.createCaptureSession(Arrays.asList(surface), new CameraCaptureSession.StateCallback() {
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
+                    // The camera is already closed
+                    if (null == cameraDevice) {
+                        return;
+                    }
+                    Log.d(TAG, "onConfigured");
+                    // When the session is ready, we start displaying the preview.
+                    cameraCaptureSessions = cameraCaptureSession;
+                    updatePreview();
+                }
+
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
+                    Log.i(TAG, "onConfigureFailed");
+                    Toast.makeText(RockchipCamera2.this, "Configuration failed", Toast.LENGTH_SHORT).show();
+                }
+            }, null);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
@@ -300,20 +364,20 @@ public class RockchipCamera2 extends Activity {
         try {
             String cameraId = manager.getCameraIdList()[0];
             CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-            StreamConfigurationMap map = characteristics.get(
-                    CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             assert map != null;
             imageDimension = map.getOutputSizes(SurfaceTexture.class)[0];
             // Add permission for camera and let user grant the permission
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
-                    PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.checkSelfPermission(this,
+                    Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+                    && ActivityCompat.checkSelfPermission(this,
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(RockchipCamera2.this,
-                        new String[]{Manifest.permission.CAMERA,
-                                Manifest.permission.WRITE_EXTERNAL_STORAGE},REQUEST_CAMERA_PERMISSION);
+                        new String[] { Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE },
+                        REQUEST_CAMERA_PERMISSION);
                 return;
             }
-            manager.openCamera(cameraId, stateCallback, null);
+            manager.openCamera(cameraId, stateCallback, mBackgroundHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
@@ -321,24 +385,26 @@ public class RockchipCamera2 extends Activity {
     }
 
     protected void updatePreview() {
-        if(null == cameraDevice) {
+        if (null == cameraDevice) {
             Log.e(TAG, "updatePreview error, return");
         }
-        Log.d(TAG,"updatePreview");
+        Log.d(TAG, "updatePreview");
         captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
         try {
-            cameraCaptureSessions.setRepeatingRequest(captureRequestBuilder.build(),
-                    null, mBackgroundHandler);
+            cameraCaptureSessions.setRepeatingRequest(captureRequestBuilder.build(), null, mBackgroundHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
     }
 
     private void closeCamera() {
-        Log.d(TAG,"closeCamera");
+        Log.d(TAG, "closeCamera");
+        createTextureView();
         if (null != cameraDevice) {
+            JniCameraCall.closeDevice();
             cameraDevice.close();
             cameraDevice = null;
+            JniCameraCall.openDevice();
         }
         if (null != imageReader) {
             imageReader.close();
@@ -348,12 +414,11 @@ public class RockchipCamera2 extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
+            @NonNull int[] grantResults) {
         if (requestCode == REQUEST_CAMERA_PERMISSION) {
             if (grantResults[0] == PackageManager.PERMISSION_DENIED) {
                 // close the app
-                Toast.makeText(RockchipCamera2.this,
-                        "Sorry!!!, you can't use this app without granting permission",
+                Toast.makeText(RockchipCamera2.this, "Sorry!!!, you can't use this app without granting permission",
                         Toast.LENGTH_LONG).show();
                 finish();
             }
@@ -365,18 +430,31 @@ public class RockchipCamera2 extends Activity {
         super.onResume();
         Log.d(TAG, "onResume");
         startBackgroundThread();
-        if (textureView.isAvailable()) {
-            openCamera();
+        /* if (textureView.isAvailable()) {
+            Log.i(TAG, "onResume textureView is Available");
+            // openCamera();
+            // Intent hdmiService = new Intent(RockchipCamera2.this, HdmiService.class);
+            // hdmiService.setPackage(getPackageName());
+            // bindService(hdmiService, conn, Context.BIND_AUTO_CREATE);
         } else {
             textureView.setSurfaceTextureListener(textureListener);
-        }
+        } */
+
     }
 
     @Override
     protected void onPause() {
         Log.d(TAG, "onPause");
-        closeCamera();
-        stopBackgroundThread();
         super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        Log.i(TAG, "onDestroy");
+        unbindService(conn);
+        closeCamera();
+        JniCameraCall.closeDevice();
+        stopBackgroundThread();
     }
 }

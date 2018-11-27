@@ -35,113 +35,106 @@
 #define LOGD(msg,...)   ALOGD("%s(%d): " msg ,__FUNCTION__,__LINE__,##__VA_ARGS__)
 
 static int camFd;
-static void getDeviceFormat(int *format) {
-	int i;
+static void getDeviceFormat(int *format)
+{
+    int i;
 
-	struct v4l2_queryctrl mPowerPresent;
-	memset(&mPowerPresent, 0, sizeof(struct v4l2_queryctrl));
-	mPowerPresent.id = V4L2_CID_DV_RX_POWER_PRESENT;
-	if (!ioctl(camFd, VIDIOC_QUERYCTRL, &mPowerPresent)) {
-		ALOGD("query success,name=%s,min=%d,max=%d,flags=%d,default_value=%d",
-			mPowerPresent.name,mPowerPresent.minimum,mPowerPresent.maximum,
-			mPowerPresent.flags,mPowerPresent.default_value);
-	}else{
-		ALOGD("query RX power present failed");
-	}
+    struct v4l2_queryctrl mPowerPresent;
+    memset(&mPowerPresent, 0, sizeof(struct v4l2_queryctrl));
+    mPowerPresent.id = V4L2_CID_DV_RX_POWER_PRESENT;
+    if (!ioctl(camFd, VIDIOC_QUERYCTRL, &mPowerPresent)) {
+    } else {
+        ALOGD("query RX power present failed");
+    }
 
-	struct v4l2_control control;
-	memset(&control, 0, sizeof(struct v4l2_control));
-	control.id = V4L2_CID_DV_RX_POWER_PRESENT;
-	int err = ioctl(camFd, VIDIOC_G_CTRL, &control);
-	if ( err < 0 ){
-	    ALOGE("Set POWER_PRESENT failed ,%d(%s)", errno, strerror(errno));
-	} else {	    
-        ALOGD(" Set POWER_PRESENT success,control.value=%d",control.value);
-	}
+    struct v4l2_control control;
+    memset(&control, 0, sizeof(struct v4l2_control));
+    control.id = V4L2_CID_DV_RX_POWER_PRESENT;
+    int err = ioctl(camFd, VIDIOC_G_CTRL, &control);
+    if ( err < 0 ){
+        ALOGE("Set POWER_PRESENT failed ,%d(%s)", errno, strerror(errno));
+    }
 
-	struct v4l2_dv_timings dv_timings;
-	memset(&dv_timings, 0 ,sizeof(struct v4l2_dv_timings));
-	err = ioctl(camFd, VIDIOC_SUBDEV_QUERY_DV_TIMINGS, &dv_timings);
-	if ( err < 0 ){
-		ALOGE("Set VIDIOC_SUBDEV_QUERY_DV_TIMINGS failed ,%d(%s)", errno, strerror(errno));
-	} else {		
-		ALOGD(" Set VIDIOC_SUBDEV_QUERY_DV_TIMINGS success,control.value=%d,W:H=%dx%d",
-			dv_timings.type,dv_timings.bt.width,dv_timings.bt.height);
-	}
+    struct v4l2_dv_timings dv_timings;
+    memset(&dv_timings, 0 ,sizeof(struct v4l2_dv_timings));
+    err = ioctl(camFd, VIDIOC_SUBDEV_QUERY_DV_TIMINGS, &dv_timings);
+    if ( err < 0 ){
+        ALOGE("Set VIDIOC_SUBDEV_QUERY_DV_TIMINGS failed ,%d(%s)", errno, strerror(errno));
+    } else {
+    }
 
-	format[0] = dv_timings.bt.width;
-	format[1] = dv_timings.bt.height;
-	format[2] = 60;
+    format[0] = dv_timings.bt.width;
+    format[1] = dv_timings.bt.height;
+    format[2] = control.value;
 }
 
 static jintArray getFormat(JNIEnv *env, jobject thiz)
 {
-	(void)thiz;
-	jintArray array = env->NewIntArray(3);
-	jint *result = new jint[3];
-	getDeviceFormat(result);
-	env->SetIntArrayRegion(array, 0, 3, result);
-	delete[] result;
-	return array;
+    (void)thiz;
+    jintArray array = env->NewIntArray(3);
+    jint *result = new jint[3];
+    getDeviceFormat(result);
+    env->SetIntArrayRegion(array, 0, 3, result);
+    delete[] result;
+    return array;
 }
 
 static void openDevice(JNIEnv *env, jobject thiz)
 {
-	(void)*env;
-	(void)thiz;
+    (void)*env;
+    (void)thiz;
 
-	char video_name[64];
-	memset(video_name, 0, sizeof(video_name));
-	strcat(video_name, "/dev/v4l-subdev2");
+    char video_name[64];
+    memset(video_name, 0, sizeof(video_name));
+    strcat(video_name, "/dev/v4l-subdev2");
 
     camFd = open(video_name, O_RDWR);
-    if(camFd < 0) {
+    if (camFd < 0) {
         LOGE("open %s failed,erro=%s",video_name,strerror(errno));
     } else {
         LOGD("open %s success,fd=%d",video_name,camFd);
-	}
+    }
 }
 
 static void closeDevice(JNIEnv *env, jobject thiz)
 {
-	(void)*env;
-	(void)thiz;
-	LOGD("close device");
-	if(camFd > 0) {
-		close(camFd);
-	}
+    (void)*env;
+    (void)thiz;
+    LOGD("close device");
+    if(camFd > 0) {
+        close(camFd);
+    }
 }
-
 
 static const char *classPathName = "com/android/rockchip/camera2/util/JniCameraCall";
 
 static JNINativeMethod methods[] = {
-	{"getFormat", "()[I", (void *)getFormat},
-	{"openDevice", "()V", (void *)openDevice},
-	{"closeDevice", "()V", (void *)closeDevice},
+    {"getFormat", "()[I", (void *)getFormat},
+    {"openDevice", "()V", (void *)openDevice},
+    {"closeDevice", "()V", (void *)closeDevice},
 };
 
 /*
  * Register several native methods for one class.
  */
 static int registerNativeMethods(JNIEnv *env, const char *className,
-								 JNINativeMethod *gMethods, int numMethods)
+                                JNINativeMethod *gMethods, int numMethods)
 {
-	jclass clazz;
+    jclass clazz;
 
-	clazz = env->FindClass(className);
-	if (clazz == NULL)
-	{
-		ALOGE("Native registration unable to find class '%s'", className);
-		return JNI_FALSE;
-	}
-	if (env->RegisterNatives(clazz, gMethods, numMethods) < 0)
-	{
-		ALOGE("RegisterNatives failed for '%s'", className);
-		return JNI_FALSE;
-	}
+    clazz = env->FindClass(className);
+    if (clazz == NULL)
+    {
+        ALOGE("Native registration unable to find class '%s'", className);
+        return JNI_FALSE;
+    }
+    if (env->RegisterNatives(clazz, gMethods, numMethods) < 0)
+    {
+        ALOGE("RegisterNatives failed for '%s'", className);
+        return JNI_FALSE;
+    }
 
-	return JNI_TRUE;
+    return JNI_TRUE;
 }
 
 /*
@@ -151,13 +144,13 @@ static int registerNativeMethods(JNIEnv *env, const char *className,
  */
 static int registerNatives(JNIEnv *env)
 {
-	if (!registerNativeMethods(env, classPathName,
-							   methods, sizeof(methods) / sizeof(methods[0])))
-	{
-		return JNI_FALSE;
-	}
+    if (!registerNativeMethods(env, classPathName,
+            methods, sizeof(methods) / sizeof(methods[0])))
+    {
+        return JNI_FALSE;
+    }
 
-	return JNI_TRUE;
+    return JNI_TRUE;
 }
 
 // ----------------------------------------------------------------------------
@@ -167,36 +160,36 @@ static int registerNatives(JNIEnv *env)
  */
 
 typedef union {
-	JNIEnv *env;
-	void *venv;
+    JNIEnv *env;
+    void *venv;
 } UnionJNIEnvToVoid;
 
 jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
-	(void)reserved;
-	UnionJNIEnvToVoid uenv;
-	uenv.venv = NULL;
-	jint result = -1;
-	JNIEnv *env = NULL;
+    (void)reserved;
+    UnionJNIEnvToVoid uenv;
+    uenv.venv = NULL;
+    jint result = -1;
+    JNIEnv *env = NULL;
 
-	ALOGI("JNI_OnLoad");
+    ALOGI("JNI_OnLoad");
 
-	if (vm->GetEnv(&uenv.venv, JNI_VERSION_1_4) != JNI_OK)
-	{
-		ALOGE("ERROR: GetEnv failed");
-		goto bail;
-	}
-	env = uenv.env;
+    if (vm->GetEnv(&uenv.venv, JNI_VERSION_1_4) != JNI_OK)
+    {
+        ALOGE("ERROR: GetEnv failed");
+        goto bail;
+    }
+    env = uenv.env;
 
-	if (registerNatives(env) != JNI_TRUE)
-	{
-		ALOGE("ERROR: registerNatives failed");
-		goto bail;
-	}
+    if (registerNatives(env) != JNI_TRUE)
+    {
+        ALOGE("ERROR: registerNatives failed");
+        goto bail;
+    }
 
-	result = JNI_VERSION_1_4;
+    result = JNI_VERSION_1_4;
 
 bail:
-	return result;
+    return result;
 }
 
