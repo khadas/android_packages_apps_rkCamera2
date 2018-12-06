@@ -4,6 +4,7 @@ import com.android.rockchip.camera2.util.JniCameraCall;
 
 import android.app.Service;
 import android.util.Log;
+import android.util.Size;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.IBinder;
@@ -15,7 +16,9 @@ public class HdmiService extends Service {
 
     private boolean loop = true;
     private boolean isHdmiIn = false;
+    private final boolean debug = false;
     private OnHdmiStatusListener mOnHdmiStatusListener;
+    private Size curDriverDimension = null;
 
     Runnable mScanHdmiIn = new Runnable() {
 
@@ -25,22 +28,25 @@ public class HdmiService extends Service {
             while (loop) {
                 int[] format = JniCameraCall.getFormat();
                 if (format != null && format.length > 0) {
-                    Log.i(TAG, "format != null format[2] = " + format[2]);
+                    curDriverDimension = new Size(format[0],format[1]);
+                    if (debug)
+                        Log.i(TAG, "format != null format[2] = " + format[2]);
                     if (format[2] != 0 && isHdmiIn != true) {
                         Log.i(TAG, "hdmi is plug");
                         isHdmiIn = true;
                         if (mOnHdmiStatusListener != null) {
-                            mOnHdmiStatusListener.onHdmiStatusChange(isHdmiIn);
+                            mOnHdmiStatusListener.onHdmiStatusChange(isHdmiIn, curDriverDimension);
                         }
                     } else if (format[2] == 0 && isHdmiIn != false) {
                         Log.i(TAG, "hdmi is unplug");
                         isHdmiIn = false;
                         if (mOnHdmiStatusListener != null) {
-                            mOnHdmiStatusListener.onHdmiStatusChange(isHdmiIn);
+                            mOnHdmiStatusListener.onHdmiStatusChange(isHdmiIn, curDriverDimension);
                         }
                     } else {
                         // Log.i(TAG, "hdmi is no change");
                     }
+                    curDriverDimension = null;
                 }
                 SystemClock.sleep(500);
             }
@@ -51,7 +57,7 @@ public class HdmiService extends Service {
      * OnHdmiStatusListener
      */
     public interface OnHdmiStatusListener {
-        void onHdmiStatusChange(boolean isHdmiIn);
+        void onHdmiStatusChange(boolean isHdmiIn, Size driverDimension);
     }
 
     /**
@@ -71,14 +77,14 @@ public class HdmiService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.e(TAG, "HdmiService onCreate()");
+        Log.i(TAG, "HdmiService onCreate()");
         new Thread(mScanHdmiIn).start();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.e(TAG, "HdmiService onDestroy()");
+        Log.i(TAG, "HdmiService onDestroy()");
         loop = false;
         this.mOnHdmiStatusListener = null;
     }

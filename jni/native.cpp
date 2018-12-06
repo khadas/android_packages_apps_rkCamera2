@@ -15,6 +15,8 @@
  */
 
 #define LOG_TAG "HdmiInput-navtive"
+//#define LOG_NDEBUG 0
+
 #include <utils/Log.h>
 #include "jni.h"
 #include <stdio.h>
@@ -33,39 +35,34 @@
 
 #define LOGE(msg,...)   ALOGE("%s(%d): " msg ,__FUNCTION__,__LINE__,##__VA_ARGS__)
 #define LOGD(msg,...)   ALOGD("%s(%d): " msg ,__FUNCTION__,__LINE__,##__VA_ARGS__)
+#define LOGV(msg,...)   ALOGV("%s(%d): " msg ,__FUNCTION__,__LINE__,##__VA_ARGS__)
+
 
 static int camFd;
 static void getDeviceFormat(int *format)
 {
-    int i;
-
-    struct v4l2_queryctrl mPowerPresent;
-    memset(&mPowerPresent, 0, sizeof(struct v4l2_queryctrl));
-    mPowerPresent.id = V4L2_CID_DV_RX_POWER_PRESENT;
-    if (!ioctl(camFd, VIDIOC_QUERYCTRL, &mPowerPresent)) {
-    } else {
-        ALOGD("query RX power present failed");
-    }
-
     struct v4l2_control control;
     memset(&control, 0, sizeof(struct v4l2_control));
     control.id = V4L2_CID_DV_RX_POWER_PRESENT;
     int err = ioctl(camFd, VIDIOC_G_CTRL, &control);
-    if ( err < 0 ){
-        ALOGE("Set POWER_PRESENT failed ,%d(%s)", errno, strerror(errno));
+    if (err < 0) {
+        LOGV("Set POWER_PRESENT failed ,%d(%s)", errno, strerror(errno));
     }
+
+    unsigned int noSignalAndSync = 0;
+    ioctl(camFd, VIDIOC_G_INPUT, &noSignalAndSync);
+    LOGV("noSignalAndSync ? %s",noSignalAndSync?"YES":"NO");
 
     struct v4l2_dv_timings dv_timings;
     memset(&dv_timings, 0 ,sizeof(struct v4l2_dv_timings));
     err = ioctl(camFd, VIDIOC_SUBDEV_QUERY_DV_TIMINGS, &dv_timings);
-    if ( err < 0 ){
-        ALOGE("Set VIDIOC_SUBDEV_QUERY_DV_TIMINGS failed ,%d(%s)", errno, strerror(errno));
-    } else {
+    if (err < 0) {
+        LOGV("Set VIDIOC_SUBDEV_QUERY_DV_TIMINGS failed ,%d(%s)", errno, strerror(errno));
     }
 
     format[0] = dv_timings.bt.width;
     format[1] = dv_timings.bt.height;
-    format[2] = control.value;
+    format[2] = control.value && !noSignalAndSync;
 }
 
 static jintArray getFormat(JNIEnv *env, jobject thiz)
