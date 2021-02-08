@@ -93,6 +93,16 @@ public class RockchipCamera2 extends Activity {
         */
         createTextureView();
         assert textureView != null;
+	// Add permission for camera and let user grant the permission
+	if (ActivityCompat.checkSelfPermission(this,
+	    Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+	    && ActivityCompat.checkSelfPermission(this,
+		    Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+	    ActivityCompat.requestPermissions(RockchipCamera2.this,
+		new String[] { Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE },
+		REQUEST_CAMERA_PERMISSION);
+	    return;
+	}
     }
 
     private void createTextureView() {
@@ -375,16 +385,6 @@ public class RockchipCamera2 extends Activity {
                 Log.d(TAG,"supported stream size: "+size.toString());
             }
             Log.d(TAG,"current hdmi input size:"+imageDimension.toString());
-            // Add permission for camera and let user grant the permission
-            if (ActivityCompat.checkSelfPermission(this,
-                    Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
-                    && ActivityCompat.checkSelfPermission(this,
-                            Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(RockchipCamera2.this,
-                        new String[] { Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE },
-                        REQUEST_CAMERA_PERMISSION);
-                return;
-            }
             manager.openCamera(cameraId, stateCallback, mBackgroundHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
