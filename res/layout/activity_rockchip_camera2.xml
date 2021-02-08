@@ -12,7 +12,7 @@ tools:context=".RockchipCamera2">
     android:layout_height="wrap_content"
     android:layout_above="@+id/btn_takepicture"
     android:layout_alignParentTop="true"/> -->
-<Button
+<!--<Button
     android:id="@+id/btn_takepicture"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
@@ -20,5 +20,5 @@ tools:context=".RockchipCamera2">
     android:layout_centerHorizontal="true"
     android:layout_marginBottom="16dp"
     android:layout_marginTop="16dp"
-    android:text="@string/take_picture" />
+    android:text="@string/take_picture" />-->
 </RelativeLayout>

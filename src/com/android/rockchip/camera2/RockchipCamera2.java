@@ -80,6 +80,8 @@ public class RockchipCamera2 extends Activity {
         setContentView(R.layout.activity_rockchip_camera2);
         rootView = (RelativeLayout) findViewById(R.id.root_view);
         JniCameraCall.openDevice();
+        Log.d(TAG,"remove take pic button");
+        /*
         Button takePictureButton = (Button) findViewById(R.id.btn_takepicture);
         assert takePictureButton != null;
         takePictureButton.setOnClickListener(new View.OnClickListener() {
@@ -88,6 +90,7 @@ public class RockchipCamera2 extends Activity {
                 takePicture();
             }
         });
+        */
         createTextureView();
         assert textureView != null;
     }
@@ -105,7 +108,6 @@ public class RockchipCamera2 extends Activity {
                 RelativeLayout.LayoutParams layoutParams = new RelativeLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                 layoutParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
-                layoutParams.addRule(RelativeLayout.BELOW, R.id.btn_takepicture);
                 textureView.setLayoutParams(layoutParams);
                 rootView.addView(textureView, 0);
                 textureView.setSurfaceTextureListener(textureListener);
