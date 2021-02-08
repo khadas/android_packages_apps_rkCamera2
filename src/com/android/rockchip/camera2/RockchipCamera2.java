@@ -96,6 +96,7 @@ public class RockchipCamera2 extends Activity {
     }
 
     private void createTextureView() {
+        Log.d(TAG, "recreatTextureview");
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
@@ -172,8 +173,7 @@ public class RockchipCamera2 extends Activity {
                     if (isHdmiIn) {
                         openCamera();
                     } else {
-                        //closeCamera();
-                        createTextureView();
+                        closeCamera();
                     }
                 }
             });
@@ -407,7 +407,6 @@ public class RockchipCamera2 extends Activity {
 
     private void closeCamera() {
         Log.d(TAG, "closeCamera");
-        createTextureView();
         if (null != cameraDevice) {
             cameraDevice.close();
             cameraDevice = null;
