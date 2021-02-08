@@ -34,12 +34,30 @@ public class HdmiService extends Service {
                     if (format[2] != 0 && isHdmiIn != true) {
                         Log.i(TAG, "hdmi is plug");
                         isHdmiIn = true;
+                        //wait activity bind service success
+			while (mOnHdmiStatusListener == null) {
+				try {
+					Thread.sleep(200);
+				} catch(InterruptedException e) {
+					e.printStackTrace();
+				}
+				if (!loop) break;
+			}
                         if (mOnHdmiStatusListener != null) {
                             mOnHdmiStatusListener.onHdmiStatusChange(isHdmiIn, curDriverDimension);
                         }
                     } else if (format[2] == 0 && isHdmiIn != false) {
                         Log.i(TAG, "hdmi is unplug");
                         isHdmiIn = false;
+                        //wait activity bind service success
+			while (mOnHdmiStatusListener == null) {
+				try {
+					Thread.sleep(200);
+				} catch(InterruptedException e) {
+					e.printStackTrace();
+				}
+				if (!loop) break;
+			}
                         if (mOnHdmiStatusListener != null) {
                             mOnHdmiStatusListener.onHdmiStatusChange(isHdmiIn, curDriverDimension);
                         }
