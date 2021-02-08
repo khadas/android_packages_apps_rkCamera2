@@ -9,8 +9,9 @@ LOCAL_STATIC_JAVA_LIBRARIES := android-support-v4
 LOCAL_RESOURCE_DIR := $(LOCAL_PATH)/res
 LOCAL_JNI_SHARED_LIBRARIES := libhdmiinput_jni
 LOCAL_CERTIFICATE := platform
-
 LOCAL_PACKAGE_NAME := rkCamera2
+LOCAL_SDK_VERSION := current
+
 include $(BUILD_PACKAGE)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
