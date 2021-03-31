@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define APK_VERSION	"V1.2"
 #define LOG_TAG "HdmiInput-navtive"
 //#define LOG_NDEBUG 0
 
@@ -170,6 +171,7 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved)
     JNIEnv *env = NULL;
 
     ALOGI("JNI_OnLoad");
+    ALOGI("Apk Version: %s", APK_VERSION);
 
     if (vm->GetEnv(&uenv.venv, JNI_VERSION_1_4) != JNI_OK)
     {

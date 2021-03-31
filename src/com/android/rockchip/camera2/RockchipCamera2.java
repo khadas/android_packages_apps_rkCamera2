@@ -434,6 +434,10 @@ public class RockchipCamera2 extends Activity {
     protected void onResume() {
         super.onResume();
         Log.d(TAG, "onResume");
+	if (textureView == null) {
+            JniCameraCall.openDevice();
+            createTextureView();
+	}
         startBackgroundThread();
         /* if (textureView.isAvailable()) {
             Log.i(TAG, "onResume textureView is Available");
@@ -451,15 +455,19 @@ public class RockchipCamera2 extends Activity {
     protected void onPause() {
         Log.d(TAG, "onPause");
         super.onPause();
+	unbindService(conn);
+	closeCamera();
+	JniCameraCall.closeDevice();
+	stopBackgroundThread();
+	if (textureView != null) {
+		rootView.removeView(textureView);
+		textureView = null;
+	}
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         Log.i(TAG, "onDestroy");
-        unbindService(conn);
-        closeCamera();
-        JniCameraCall.closeDevice();
-        stopBackgroundThread();
     }
 }
