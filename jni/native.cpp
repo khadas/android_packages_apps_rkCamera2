@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define APK_VERSION	"V1.2"
+#define APK_VERSION	"V1.3"
 #define LOG_TAG "HdmiInput-navtive"
 //#define LOG_NDEBUG 0
 

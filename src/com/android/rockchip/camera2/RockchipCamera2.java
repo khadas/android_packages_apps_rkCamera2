@@ -73,6 +73,7 @@ public class RockchipCamera2 extends Activity {
     private HandlerThread mBackgroundThread;
     private HdmiService mHdmiService;
     private RelativeLayout rootView;
+    private boolean mPaused = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -178,7 +179,8 @@ public class RockchipCamera2 extends Activity {
 
                 @Override
                 public void onHdmiStatusChange(boolean isHdmiIn, Size driverDimension) {
-                    Log.i(TAG, "onHdmiStatusChange isHdmiIn = " + isHdmiIn);
+                    if (mPaused) return;
+                    Log.i(TAG, "onHdmiStatusChange isHdmiIn = " + isHdmiIn + ",mPaused:" + mPaused);
                     imageDimension = driverDimension;
                     if (isHdmiIn) {
                         openCamera();
@@ -432,6 +434,7 @@ public class RockchipCamera2 extends Activity {
 
     @Override
     protected void onResume() {
+        mPaused = false;
         super.onResume();
         Log.d(TAG, "onResume");
 	if (textureView == null) {
@@ -454,8 +457,14 @@ public class RockchipCamera2 extends Activity {
     @Override
     protected void onPause() {
         Log.d(TAG, "onPause");
+        mPaused = true;
         super.onPause();
-	unbindService(conn);
+	try {
+	    Log.d(TAG, "unbindService");
+	    unbindService(conn);
+	} catch(Exception e) {
+	    Log.e(TAG, "exception:" + e);
+	}
 	closeCamera();
 	JniCameraCall.closeDevice();
 	stopBackgroundThread();
