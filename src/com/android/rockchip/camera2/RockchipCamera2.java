@@ -24,6 +24,7 @@ import android.os.IBinder;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.RemoteException;
 import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
@@ -49,6 +50,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import com.android.rockchip.camera2.util.JniCameraCall;
+import rockchip.hardware.hdmi.V1_0.IHdmi;
+import rockchip.hardware.hdmi.V1_0.IHdmiCallback;
 
 public class RockchipCamera2 extends Activity {
 
@@ -65,7 +68,7 @@ public class RockchipCamera2 extends Activity {
     protected CameraCaptureSession cameraCaptureSessions;
     protected CaptureRequest captureRequest;
     protected CaptureRequest.Builder captureRequestBuilder;
-    private Size imageDimension;
+    private Size imageDimension= new Size(1920,1080);
     private ImageReader imageReader;
     private File file;
     private static final int REQUEST_CAMERA_PERMISSION = 200;
@@ -74,13 +77,43 @@ public class RockchipCamera2 extends Activity {
     private HdmiService mHdmiService;
     private RelativeLayout rootView;
     private boolean mPaused = false;
+    class HdmiCallback extends IHdmiCallback.Stub{
+        public  HdmiCallback(){
+        }
+
+        public void onConnect() throws RemoteException {
+            Log.e(TAG,"onConnect");
+            openCamera();
+        }
+
+        public void onDisconnect() throws RemoteException {
+            Log.e(TAG,"onDisconnect");
+            closeCamera();
+        }
+    }
+    HdmiCallback mHdmiCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_rockchip_camera2);
         rootView = (RelativeLayout) findViewById(R.id.root_view);
-        JniCameraCall.openDevice();
+        mHdmiCallback= new HdmiCallback();
+            try {
+                IHdmi service = IHdmi.getService(true);
+
+                service.registerListener((IHdmiCallback)mHdmiCallback);
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
+        //JniCameraCall.openDevice();
+        // try {
+        //     IHdmi service = IHdmi.getService(IHdmi.kInterfaceName,true);
+
+        //     service.registerListener((IHdmiCallback)mHdmiCallback);
+        // } catch (RemoteException e) {
+        //     e.printStackTrace();
+        // }
         Log.d(TAG,"remove take pic button");
         /*
         Button takePictureButton = (Button) findViewById(R.id.btn_takepicture);
@@ -132,10 +165,10 @@ public class RockchipCamera2 extends Activity {
         public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
             // open your camera here
             Log.d(TAG, "onSurfaceTextureAvailable");
-            // openCamera();
-            Intent hdmiService = new Intent(RockchipCamera2.this, HdmiService.class);
-            hdmiService.setPackage(getPackageName());
-            bindService(hdmiService, conn, Context.BIND_AUTO_CREATE);
+            openCamera();
+            // Intent hdmiService = new Intent(RockchipCamera2.this, HdmiService.class);
+            // hdmiService.setPackage(getPackageName());
+            // bindService(hdmiService, conn, Context.BIND_AUTO_CREATE);
         }
 
         @Override
@@ -162,36 +195,36 @@ public class RockchipCamera2 extends Activity {
         }
     };
 
-    ServiceConnection conn = new ServiceConnection() {
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            Log.i(TAG, "onServiceDisconnected");
-        }
+    // ServiceConnection conn = new ServiceConnection() {
+    //     @Override
+    //     public void onServiceDisconnected(ComponentName name) {
+    //         Log.i(TAG, "onServiceDisconnected");
+    //     }
 
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            Log.i(TAG, "onServiceConnected");
-            // 返回一个HdmiService对象
-            mHdmiService = ((HdmiService.HdmiBinder) service).getService();
+    //     @Override
+    //     public void onServiceConnected(ComponentName name, IBinder service) {
+    //         Log.i(TAG, "onServiceConnected");
+    //         // 返回一个HdmiService对象
+    //         mHdmiService = ((HdmiService.HdmiBinder) service).getService();
 
-            // 注册回调接口来接收HDMI的变化
-            mHdmiService.setOnHdmiStatusListener(new HdmiService.OnHdmiStatusListener() {
+    //         // 注册回调接口来接收HDMI的变化
+    //         mHdmiService.setOnHdmiStatusListener(new HdmiService.OnHdmiStatusListener() {
 
-                @Override
-                public void onHdmiStatusChange(boolean isHdmiIn, Size driverDimension) {
-                    if (mPaused) return;
-                    Log.i(TAG, "onHdmiStatusChange isHdmiIn = " + isHdmiIn + ",mPaused:" + mPaused);
-                    imageDimension = driverDimension;
-                    if (isHdmiIn) {
-                        openCamera();
-                    } else {
-                        closeCamera();
-                    }
-                }
-            });
+    //             @Override
+    //             public void onHdmiStatusChange(boolean isHdmiIn, Size driverDimension) {
+    //                 if (mPaused) return;
+    //                 Log.i(TAG, "onHdmiStatusChange isHdmiIn = " + isHdmiIn + ",mPaused:" + mPaused);
+    //                 imageDimension = driverDimension;
+    //                 if (isHdmiIn) {
+    //                     openCamera();
+    //                 } else {
+    //                     closeCamera();
+    //                 }
+    //             }
+    //         });
 
-        }
-    };
+    //     }
+    // };
 
     private final CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
         @Override
@@ -375,20 +408,47 @@ public class RockchipCamera2 extends Activity {
     }
 
     private void openCamera() {
+        String  getHdmiDeviceId= "";
+        try {
+                IHdmi service = IHdmi.getService(true);
+                getHdmiDeviceId = service.getHdmiDeviceId();
+                service.registerListener((IHdmiCallback)mHdmiCallback);
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         Log.i(TAG, "openCamera start");
         try {
-            String cameraId = manager.getCameraIdList()[0];
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+            if(manager.getCameraIdList().length == 0){
+                Log.i(TAG, "openCamera length == 0");
+                return;
+            }
+            boolean haveHDMI=false;
+            String hdmiCameraId="";
+            for (String cameraId : manager.getCameraIdList()) {
+                Log.i(TAG, "cameraId:"+cameraId);
+                if(cameraId.equals(getHdmiDeviceId)){
+                    haveHDMI = true;
+                    hdmiCameraId = cameraId;
+                    Log.i(TAG, "haveHDMI cameraId:"+cameraId);
+                }
+            }
+            if(!haveHDMI){
+                return;
+            }
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(hdmiCameraId);
             StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             assert map != null;
             //imageDimension = map.getOutputSizes(SurfaceTexture.class)[0];
             for (Size size : map.getOutputSizes(SurfaceTexture.class)) {
                 Log.d(TAG,"supported stream size: "+size.toString());
+                imageDimension = size;
             }
             Log.d(TAG,"current hdmi input size:"+imageDimension.toString());
-            manager.openCamera(cameraId, stateCallback, mBackgroundHandler);
+            manager.openCamera(hdmiCameraId, stateCallback, mBackgroundHandler);
         } catch (CameraAccessException e) {
+            e.printStackTrace();
+        } catch (Exception e){
             e.printStackTrace();
         }
         Log.i(TAG, "openCamera end");
@@ -438,7 +498,14 @@ public class RockchipCamera2 extends Activity {
         super.onResume();
         Log.d(TAG, "onResume");
 	if (textureView == null) {
-            JniCameraCall.openDevice();
+            // JniCameraCall.openDevice();
+            try {
+                IHdmi service = IHdmi.getService(true);
+
+                service.registerListener((IHdmiCallback)mHdmiCallback);
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
             createTextureView();
 	}
         startBackgroundThread();
@@ -459,14 +526,20 @@ public class RockchipCamera2 extends Activity {
         Log.d(TAG, "onPause");
         mPaused = true;
         super.onPause();
-	try {
-	    Log.d(TAG, "unbindService");
-	    unbindService(conn);
-	} catch(Exception e) {
-	    Log.e(TAG, "exception:" + e);
-	}
+	// try {
+	//     Log.d(TAG, "unbindService");
+	//     unbindService(conn);
+	// } catch(Exception e) {
+	//     Log.e(TAG, "exception:" + e);
+	// }
+        try {
+            IHdmi service = IHdmi.getService(true);
+            service.unregisterListener((IHdmiCallback)mHdmiCallback);
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
 	closeCamera();
-	JniCameraCall.closeDevice();
+	// JniCameraCall.closeDevice();
 	stopBackgroundThread();
 	if (textureView != null) {
 		rootView.removeView(textureView);

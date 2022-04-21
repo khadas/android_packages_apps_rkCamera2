@@ -12,7 +12,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.NoTitleBar">
-        <activity android:name=".RockchipCamera2">
+        <activity
+	        android:exported="true"
+            android:name=".RockchipCamera2">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -21,6 +23,7 @@
         </activity>
 
         <service
+	        android:exported="true"
             android:name=".HdmiService">
             <intent-filter>
                 <action android:name="com.android.rockchip.camera2.HdmiService" />
