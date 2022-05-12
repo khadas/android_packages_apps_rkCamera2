@@ -1,4 +1,14 @@
 <resources>
     <string name="app_name">RockchipCamera2</string>
     <string name="take_picture">Take picture</string>
+
+    <string name="back_key_warn">Back Key disable</string>
+    <string name="err_not_channel">Not found ChannelUri</string>
+    <string name="btn_switch">Switch</string>
+    <string name="btn_record">record</string>
+    <string name="btn_record_start">start record</string>
+    <string name="btn_record_stop">end record</string>
+    <string name="btn_screenshot">screenshot</string>
+    <string name="notification_screen_record">screen record</string>
+    <string name="save_failed">save failed</string>
 </resources>
