@@ -9,7 +9,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="40dp"
-        android:text="@string/btn_switch" />
+        android:text="@string/btn_switch"
+        android:visibility="gone" />
 
     <Button
         android:id="@+id/btn_screenshot"

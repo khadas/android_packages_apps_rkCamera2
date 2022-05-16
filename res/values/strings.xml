@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">RockchipCamera2</string>
+    <string name="app_name">HdmiIn</string>
     <string name="take_picture">Take picture</string>
 
     <string name="back_key_warn">Back Key disable</string>

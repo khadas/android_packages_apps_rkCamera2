@@ -7,8 +7,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.ImageFormat;
-import android.graphics.Matrix;
-import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.ColorDrawable;
 import android.hardware.camera2.CameraAccessException;
@@ -23,7 +21,6 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.media.MediaRecorder;
-import android.media.projection.MediaProjectionManager;
 import android.media.tv.TvContract;
 import android.media.tv.TvView;
 import android.net.Uri;
@@ -51,13 +48,11 @@ import android.widget.Toast;
 
 import com.android.rockchip.camera2.HdmiService;
 import com.android.rockchip.camera2.R;
-import com.android.rockchip.camera2.ScreenRecordService;
 import com.android.rockchip.camera2.util.DataUtils;
 import com.android.rockchip.camera2.util.SystemPropertiesProxy;
 
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -70,17 +65,18 @@ import java.util.List;
 import rockchip.hardware.hdmi.V1_0.IHdmi;
 import rockchip.hardware.hdmi.V1_0.IHdmiCallback;
 
-public class MainActivity extends Activity implements View.OnAttachStateChangeListener, View.OnClickListener {
+public class MainActivity extends Activity implements View.OnAttachStateChangeListener,
+        View.OnClickListener, ImageReader.OnImageAvailableListener {
 
     private static final String TAG = "RockchipCamera2";
     private TextureView textureView;
     private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
 
-    private final int MEDIA_PROJECTION_REQUEST_CODE = 0x001;
     private final int MSG_START_TV = 0;
     private final int MSG_SWITCH_MODE = 1;
     private final int MSG_CAMERA_RECORD = 2;
-    private final int MSG_REQUEST_SCREEN_SHOT = 3;
+    private final int MSG_CAMERA_CAPTURE = 3;
+    private final int MSG_REQUEST_SCREEN_SHOT = 4;
 
     static {
         ORIENTATIONS.append(Surface.ROTATION_0, 90);
@@ -106,19 +102,20 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
     private boolean mAlreadyTvTune;
     private boolean mIsDestory;
     private long mLastClickTime;
-    private boolean mSidebandScreenShot;
-    private boolean mSidebandRecord;
+    private boolean mSidebandCameraCapture;
+    private boolean mSidebandCameraRecord;
     private boolean mIsRecord;
-    private final boolean USED_SCREEN_RECORD = false;
     private MediaRecorder mMediaRecorder;
     private String mCurrentSavePath;
+    private int mCameraSensorOrientation;
+    private ImageReader mImageReader;
+    private boolean mCanCapturePic;
 
     protected CameraDevice cameraDevice;
-    protected CameraCaptureSession cameraCaptureSessions;
+    protected CameraCaptureSession mCameraCaptureSessions;
     protected CaptureRequest captureRequest;
-    protected CaptureRequest.Builder captureRequestBuilder;
+    protected CaptureRequest.Builder mCaptureRequestBuilder;
     private Size imageDimension = new Size(1920, 1080);
-    private ImageReader imageReader;
     private File file;
     private Handler mBackgroundHandler;
     private HandlerThread mBackgroundThread;
@@ -162,6 +159,7 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
                         mAlreadyTvTune = true;
                         tvView.tune(DataUtils.INPUT_ID, mChannelUri);
                         startHdmiAudioService();
+                        btn_screenshot.setEnabled(true);
                         mPopViewPrepared = true;
                     }
                 } else if (MSG_SWITCH_MODE == msg.what) {
@@ -170,18 +168,32 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
                         pauseSideband();
                         resumeCamera();
                     } else {
-                        resumeSideband();
                         pauseCamera();
+                        resumeSideband();
                     }
                     mIsSideband = !mIsSideband;
                 } else if (MSG_CAMERA_RECORD == msg.what) {
                     Log.v(TAG, "MediaRecorder.start()");
                     btn_record.setText(R.string.btn_record_stop);
                     mMediaRecorder.start();
+                } else if (MSG_CAMERA_CAPTURE == msg.what) {
+                    Log.v(TAG, "do capture pic");
+                    mCanCapturePic = true;
+                    try {
+                        CaptureRequest.Builder captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+                        captureRequestBuilder.addTarget(mImageReader.getSurface());
+                        captureRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, mCameraSensorOrientation);
+                        mCameraCaptureSessions.capture(captureRequestBuilder.build(), null, mBackgroundHandler);
+                        Log.v(TAG, "do capture pic end");
+                    } catch (CameraAccessException e) {
+                        e.printStackTrace();
+                    }
                 } else if (MSG_REQUEST_SCREEN_SHOT == msg.what) {
-                    mSidebandScreenShot = false;
+                    mSidebandCameraCapture = false;
                     if (!mIsSideband) {
-                        screenShot();
+                        String savePath = getSavePath(".png");
+                        execCmd("screencap -p " + savePath);
+                        addSaveFileToDb(savePath);
                         switchPreviewMode();
                     } else {
                         mPopViewPrepared = true;
@@ -202,10 +214,6 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         mChannelUri = TvContract.buildChannelUriForPassthroughInput(DataUtils.INPUT_ID);
         registerReceiver();
 
-        if (USED_SCREEN_RECORD) {
-            Intent intent = ScreenRecordService.getCreateIntent(this);
-            startForegroundService(intent);
-        }
         initPopWindow();
         mCameraFree = true;
     }
@@ -249,6 +257,8 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
     }
 
     private void resumeCamera() {
+        stopCameraRecord();
+        stopCameraCapture();
         mPopViewPrepared = false;
         mCameraFree = false;
         if (textureView == null) {
@@ -330,6 +340,7 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         }
         stopHdmiAudioService();
         stopCameraRecord();
+        stopCameraCapture();
         finish();
         try {
             Thread.sleep(100);
@@ -383,47 +394,32 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
             mPopViewPrepared = false;
             mPopView.dismiss();
             if (mIsSideband) {
-                mSidebandScreenShot = true;
+                mSidebandCameraCapture = true;
                 switchPreviewMode();
             } else {
-                screenShot();
+                mPopViewPrepared = true;
             }
         } else if (btn_record.getId() == v.getId()) {
             mPopViewPrepared = false;
             mPopView.dismiss();
+            btn_screenshot.setEnabled(false);
             if (mIsRecord) {
-                if (USED_SCREEN_RECORD) {
-                    stopScreenRecord();
+                stopCameraRecord();
+                if (mIsSideband) {
+                    mPopViewPrepared = true;
                 } else {
-                    stopCameraRecord();
-                    if (mIsSideband) {
-                        mPopViewPrepared = true;
-                    } else {
-                        switchPreviewMode();
-                    }
+                    switchPreviewMode();
                 }
             } else {
-                mSidebandRecord = mIsSideband;
-                switchPreviewMode();
+                if (mIsSideband) {
+                    mSidebandCameraRecord = mIsSideband;
+                    switchPreviewMode();
+                } else {
+                    mPopViewPrepared = true;
+                }
             }
         } else if (mPopViewPrepared) {
             //mPopView.showAtLocation(rootView, Gravity.LEFT, 50, 50);
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        Log.v(TAG, "onActivityResult requestCode=" + requestCode + ", resultCode=" + resultCode + ", " + data);
-        if (requestCode == MEDIA_PROJECTION_REQUEST_CODE) {
-            if (null == data) {
-                mIsRecord = false;
-            } else {
-                Intent intent = ScreenRecordService.getStartIntent(this, resultCode, data, getSavePath(".mp4"));
-                btn_record.setText(R.string.btn_record_stop);
-                startForegroundService(intent);
-            }
-            mPopViewPrepared = true;
         }
     }
 
@@ -466,7 +462,7 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
             boolean ret = storagePath.mkdirs();
             Log.v(TAG, "create " + storagePath.getAbsolutePath() + " " + ret);
         }
-        SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd_HHmmss");
+        SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd_HHmmss");//yyyyMMdd_HHmmssSSS
         return storagePath.getAbsolutePath() + "/"
                 + format.format(new Date(System.currentTimeMillis()))
                 + suffix;
@@ -478,73 +474,33 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         mHandler.sendEmptyMessage(MSG_SWITCH_MODE);
     }
 
-    private void screenShot() {
-        boolean ret = execCmd("screencap -p " + getSavePath(".png"));
-        if (ret) {
-            //showToast(path);
-        } else {
-            showToast(R.string.save_failed);
-        }
-    }
-
-    private void startScreenRecord() {
-        if (!mIsRecord) {
-            Log.v(TAG, "startScreenRecord");
-            mIsRecord = true;
-            MediaProjectionManager manager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-            Intent intent = new Intent(manager.createScreenCaptureIntent());
-            startActivityForResult(intent, MEDIA_PROJECTION_REQUEST_CODE);
-        }
-    }
-
-    private void stopScreenRecord() {
-        Log.v(TAG, "stopScreenRecord");
-        Intent intent = ScreenRecordService.getStopIntent(this);
-        startForegroundService(intent);
-        mIsRecord = false;
-        btn_record.setText(R.string.btn_record_start);
-        if (mSidebandRecord) {
-            mSidebandRecord = false;
-            if (!mIsSideband) {
-                switchPreviewMode();
-            } else {
-                mPopViewPrepared = true;
-            }
-        } else {
-            mPopViewPrepared = true;
-        }
+    private void addSaveFileToDb(String filePath) {
+        Intent intent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+        intent.setData(Uri.fromFile(new File(filePath)));
+        sendBroadcast(intent);
     }
 
     private void stopCameraRecord() {
-        Log.v(TAG, "stopCameraRecord start");
         mIsRecord = false;
         btn_record.setText(R.string.btn_record_start);
         if (null != mMediaRecorder) {
+            Log.v(TAG, "stopCameraRecord start");
             mMediaRecorder.stop();
             mMediaRecorder.reset();
             mMediaRecorder = null;
-            Intent intent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
-            intent.setData(Uri.fromFile(new File(mCurrentSavePath)));
-            sendBroadcast(intent);
+            addSaveFileToDb(mCurrentSavePath);
+            Log.v(TAG, "stopCameraRecord end");
         }
-        Log.v(TAG, "stopCameraRecord end");
     }
-//
-//    private void addRecordFileToDb() {
-//        ContentValues values = new ContentValues();
-////        values.put(MediaStore.Video.Media.DISPLAY_NAME, mCurrentSavePath);
-//        values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-//        values.put(MediaStore.Video.Media.DATE_ADDED, System.currentTimeMillis());
-//        values.put(MediaStore.Video.Media.DATE_TAKEN, System.currentTimeMillis());
-//        Uri collectionUri = MediaStore.Video.Media.getContentUri(
-//                MediaStore.VOLUME_EXTERNAL_PRIMARY);
-//        Uri uri = getContentResolver().insert(collectionUri, values);
-//        if (null != uri) {
-//            Log.v(TAG, mCurrentSavePath + ", " + uri);
-//        } else {
-//            Log.v(TAG, mCurrentSavePath + " add to db failed");
-//        }
-//    }
+
+    private void stopCameraCapture() {
+        if (null != mImageReader) {
+            Log.v(TAG, "stopCameraCapture start");
+            mImageReader.close();
+            mImageReader = null;
+            Log.v(TAG, "stopCameraCapture start");
+        }
+    }
 
     private void setUpMediaRecorder(String savePath) throws Exception {
         mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
@@ -714,6 +670,7 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
             super.onCaptureCompleted(session, request, result);
             Toast.makeText(MainActivity.this, "Saved:" + file, Toast.LENGTH_SHORT).show();
             createCameraPreview();
+            Log.v(TAG, "onCaptureCompleted");
         }
     };
 
@@ -737,99 +694,39 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         }
     }
 
-    protected void takePicture() {
-        if (null == cameraDevice) {
-            Log.e(TAG, "cameraDevice is null");
+    @Override
+    public void onImageAvailable(ImageReader reader) {
+        Log.v(TAG, "onImageAvailable");
+        if (!mCanCapturePic || mIsDestory) {
             return;
         }
-        CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        mCanCapturePic = false;
+        Image image = null;
+        FileOutputStream output = null;
         try {
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraDevice.getId());
-            Size[] jpegSizes = null;
-            if (characteristics != null) {
-                jpegSizes = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-                        .getOutputSizes(ImageFormat.JPEG);
-            }
-            int width = 640;
-            int height = 480;
-            if (jpegSizes != null && 0 < jpegSizes.length) {
-                width = jpegSizes[0].getWidth();
-                height = jpegSizes[0].getHeight();
-            }
-            width = imageDimension.getWidth();
-            height = imageDimension.getHeight();
-            Log.d(TAG, "pic size W=" + width + ",H=" + height);
-            ImageReader reader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1);
-            List<Surface> outputSurfaces = new ArrayList<Surface>(2);
-            outputSurfaces.add(reader.getSurface());
-            outputSurfaces.add(new Surface(textureView.getSurfaceTexture()));
-            final CaptureRequest.Builder captureBuilder = cameraDevice
-                    .createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            captureBuilder.addTarget(reader.getSurface());
-            captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-            // Orientation
-            int rotation = getWindowManager().getDefaultDisplay().getRotation();
-            captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATIONS.get(rotation));
-            final File file = new File(Environment.getExternalStorageDirectory() + "/pic.jpg");
-            ImageReader.OnImageAvailableListener readerListener = new ImageReader.OnImageAvailableListener() {
-                @Override
-                public void onImageAvailable(ImageReader reader) {
-                    Image image = null;
-                    try {
-                        image = reader.acquireLatestImage();
-                        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-                        byte[] bytes = new byte[buffer.capacity()];
-                        buffer.get(bytes);
-                        save(bytes);
-                    } catch (FileNotFoundException e) {
-                        e.printStackTrace();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    } finally {
-                        if (image != null) {
-                            image.close();
-                        }
-                    }
-                }
-
-                private void save(byte[] bytes) throws IOException {
-                    OutputStream output = null;
-                    try {
-                        output = new FileOutputStream(file);
-                        output.write(bytes);
-                    } finally {
-                        if (null != output) {
-                            output.close();
-                        }
-                    }
-                }
-            };
-            reader.setOnImageAvailableListener(readerListener, mBackgroundHandler);
-            final CameraCaptureSession.CaptureCallback captureListener = new CameraCaptureSession.CaptureCallback() {
-                @Override
-                public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request,
-                                               TotalCaptureResult result) {
-                    super.onCaptureCompleted(session, request, result);
-                    Toast.makeText(MainActivity.this, "Saved:" + file, Toast.LENGTH_SHORT).show();
-                    createCameraPreview();
-                }
-            };
-            cameraDevice.createCaptureSession(outputSurfaces, new CameraCaptureSession.StateCallback() {
-                @Override
-                public void onConfigured(CameraCaptureSession session) {
-                    try {
-                        session.capture(captureBuilder.build(), captureListener, mBackgroundHandler);
-                    } catch (CameraAccessException e) {
-                        e.printStackTrace();
-                    }
-                }
-
-                @Override
-                public void onConfigureFailed(CameraCaptureSession session) {
-                }
-            }, mBackgroundHandler);
-        } catch (CameraAccessException e) {
+            image = reader.acquireNextImage();
+            ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+            byte[] bytes = new byte[buffer.remaining()];
+            buffer.get(bytes);
+            String savePath = getSavePath(".jpg");
+            output = new FileOutputStream(savePath);
+            output.write(bytes);
+            addSaveFileToDb(savePath);
+        } catch (IOException e) {
             e.printStackTrace();
+        } finally {
+            mSidebandCameraCapture = false;
+            switchPreviewMode();
+            if (null != image) {
+                image.close();
+            }
+            if (null != output) {
+                try {
+                    output.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
         }
     }
 
@@ -842,20 +739,27 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
                     + imageDimension.getHeight());
             texture.setDefaultBufferSize(imageDimension.getWidth(), imageDimension.getHeight());
             Surface surface = new Surface(texture);
-            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             List<Surface> surfacesList = new ArrayList<>();
-            surfacesList.add(surface);
-            captureRequestBuilder.addTarget(surface);
-
-            if (mSidebandRecord) {
+            mCaptureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            //captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            if (mSidebandCameraCapture) {
+                stopCameraCapture();
+                mImageReader = ImageReader.newInstance(imageDimension.getWidth(), imageDimension.getHeight(), ImageFormat.JPEG, 1);
+                mImageReader.setOnImageAvailableListener(this, mBackgroundHandler);
+                Surface captureSurface = mImageReader.getSurface();
+                surfacesList.add(captureSurface);
+                //mCaptureRequestBuilder.addTarget(captureSurface);
+            } else if (mSidebandCameraRecord) {
                 stopCameraRecord();
                 mMediaRecorder = new MediaRecorder();
                 mCurrentSavePath = getSavePath(".mp4");
                 setUpMediaRecorder(mCurrentSavePath);
                 Surface recorderSurface = mMediaRecorder.getSurface();
                 surfacesList.add(recorderSurface);
-                captureRequestBuilder.addTarget(recorderSurface);
+                mCaptureRequestBuilder.addTarget(recorderSurface);
             }
+            surfacesList.add(surface);
+            mCaptureRequestBuilder.addTarget(surface);
 
             cameraDevice.createCaptureSession(surfacesList, new CameraCaptureSession.StateCallback() {
                 @Override
@@ -866,10 +770,9 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
                     }
                     Log.d(TAG, "onConfigured");
                     // When the session is ready, we start displaying the preview.
-                    cameraCaptureSessions = cameraCaptureSession;
+                    mCameraCaptureSessions = cameraCaptureSession;
                     updatePreview();
-                    if (mSidebandRecord) {
-//                        mHandler.sendEmptyMessage(MSG_CAMERA_RECORD);
+                    if (mSidebandCameraRecord) {
                         Log.v(TAG, "MediaRecorder.start()");
                         mIsRecord = true;
                         btn_record.setText(R.string.btn_record_stop);
@@ -928,19 +831,13 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
                 Log.d(TAG, "supported stream size: " + size.toString());
                 imageDimension = size;
             }
-            Log.d(TAG, "current hdmi input size:" + imageDimension.toString());
-            int sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
-            Log.v(TAG, "sensorOrientation=" + sensorOrientation);
-            configureTextureViewTransform(180, textureView.getWidth(), textureView.getHeight());
+            mCameraSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+            Log.d(TAG, "current hdmi input size:" + imageDimension.toString() + ", orientation=" + mCameraSensorOrientation);
+            //configureTextureViewTransform(180, textureView.getWidth(), textureView.getHeight());*/
             manager.openCamera(hdmiCameraId, stateCallback, mBackgroundHandler);
             Log.v(TAG, "open camera end");
             startHdmiAudioService();
-            if (mSidebandScreenShot) {
-                mHandler.sendEmptyMessageDelayed(MSG_REQUEST_SCREEN_SHOT, DataUtils.MAIN_REQUEST_SCREENSHOT_DELAYED);
-            } else if (mSidebandRecord) {
-                if (USED_SCREEN_RECORD) {
-                    startScreenRecord();
-                }
+            if (mSidebandCameraRecord || mSidebandCameraCapture) {
             } else {
                 mPopViewPrepared = true;
             }
@@ -952,43 +849,26 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         Log.i(TAG, "openCamera end");
     }
 
-    private void configureTextureViewTransform(int rotation, int viewWidth, int viewHeight) {
-        if (rotation == 0) {
-            return;
-        }
-        Matrix matrix = new Matrix();
-        RectF viewRect = new RectF(0, 0, viewWidth, viewHeight);
-        RectF bufferRect = new RectF(0, 0, imageDimension.getHeight(), imageDimension.getWidth());
-        float centerX = viewRect.centerX();
-        float centerY = viewRect.centerY();
-        if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
-            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
-            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
-            float scale = Math.max(
-                    (float) viewHeight / imageDimension.getHeight(),
-                    (float) viewWidth / imageDimension.getWidth());
-            matrix.postScale(scale, scale, centerX, centerY);
-            matrix.postRotate(90 * (rotation - 2), centerX, centerY);
-        } else if (Surface.ROTATION_180 == rotation) {
-            matrix.postRotate(180, centerX, centerY);
-        }
-        textureView.setTransform(matrix);
-    }
-
     protected void updatePreview() {
         if (null == cameraDevice) {
             Log.e(TAG, "updatePreview error, return");
         }
         Log.d(TAG, "updatePreview");
-        captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+        mCaptureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
         try {
-            cameraCaptureSessions.setRepeatingRequest(captureRequestBuilder.build(), null, mBackgroundHandler);
+            if (mSidebandCameraCapture) {
+                mHandler.removeMessages(MSG_CAMERA_CAPTURE);
+                mHandler.sendEmptyMessageDelayed(MSG_CAMERA_CAPTURE, DataUtils.MAIN_REQUEST_SCREENSHOT_DELAYED);
+            }
+            mCameraCaptureSessions.setRepeatingRequest(mCaptureRequestBuilder.build(), null, mBackgroundHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
     }
 
     private void closeCamera() {
+        stopCameraRecord();
+        stopCameraCapture();
         Log.v(TAG, "closeCamera start");
         if (null != cameraDevice) {
             cameraDevice.close();
@@ -997,10 +877,6 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         mCameraFree = true;
         mHandler.removeMessages(MSG_START_TV);
         mHandler.sendEmptyMessage(MSG_START_TV);
-        if (null != imageReader) {
-            imageReader.close();
-            imageReader = null;
-        }
         Log.v(TAG, "closeCamera end");
     }
 
@@ -1031,6 +907,7 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         Log.i(TAG, "onDestroy");
         mIsDestory = true;
         mHandler.removeMessages(MSG_START_TV);
+        mHandler.removeMessages(MSG_CAMERA_CAPTURE);
         mHandler.removeMessages(MSG_REQUEST_SCREEN_SHOT);
         unregisterReceiver();
     }
