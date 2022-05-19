@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?><!--
+<?xml version="1.0" encoding="utf-8"?>
+<!--
   ~ Copyright (C) 2015 The Android Open Source Project
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,21 +18,10 @@
 <!-- Foreground is the transparent color. Without the foreground, UIs above SurfaceView
      sometimes show some artifacts. -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root_view"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:foreground="@android:color/transparent"
     android:keepScreenOn="true">
-
-    <RelativeLayout
-        android:id="@+id/root_view"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
-    <!--    <android.media.tv.TvView-->
-    <!--        android:id="@+id/tv_view"-->
-    <!--        android:layout_width="match_parent"-->
-    <!--        android:layout_height="match_parent"-->
-    <!--        android:layout_gravity="start|center_vertical" />-->
-
 
 </RelativeLayout>

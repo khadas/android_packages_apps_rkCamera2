@@ -5,6 +5,7 @@ public class DataUtils {
     public static final long LIMIT_DOUBLE_CLICK_TIME = 1000;
     public static final long START_TV_REVIEW_DELAY = 500;
     public static final long MAIN_REQUEST_SCREENSHOT_DELAYED = 1000;
+    public static final long MAIN_ENABLE_SETTINGS_DEALY = 1000;
 
     public static final int VIDEO_RECORD_BIT_RATE = 6000000;
     public static final int VIDEO_RECORD_FRAME_RATE = 30;
@@ -16,4 +17,9 @@ public class DataUtils {
     public static final String HDMIIN_AUDIO_CLS_NAME = "com.rockchip.rkhdmiinaudio.HdmiInAudioService";
 
     public static final String STORAGE_PATH_NAME = "hdmiin";
+
+    public static final String PERSIST_HDMIRX_EDID = "persist.sys.hdmirx.edid";
+    public static final String HDMIRX_EDID_1 = "1";
+    public static final String HDMIRX_EDID_2 = "2";
+
 }

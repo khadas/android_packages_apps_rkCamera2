@@ -6,6 +6,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Color;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.ColorDrawable;
@@ -44,12 +45,14 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.PopupWindow;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.android.rockchip.camera2.HdmiService;
 import com.android.rockchip.camera2.R;
 import com.android.rockchip.camera2.util.DataUtils;
 import com.android.rockchip.camera2.util.SystemPropertiesProxy;
+import com.android.rockchip.camera2.widget.RoundMenu;
 
 import java.io.DataOutputStream;
 import java.io.File;
@@ -77,6 +80,7 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
     private final int MSG_CAMERA_RECORD = 2;
     private final int MSG_CAMERA_CAPTURE = 3;
     private final int MSG_REQUEST_SCREEN_SHOT = 4;
+    private final int MSG_ENABLE_SETTINGS = 5;
 
     static {
         ORIENTATIONS.append(Surface.ROTATION_0, 90);
@@ -90,11 +94,16 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
     private Button btn_switch;
     private Button btn_screenshot;
     private Button btn_record;
+    private PopupWindow mPopSettings;
+    private RoundMenu rm_pop_settings;
+    private TextView txt_hdmirx_edid_1;
+    private TextView txt_hdmirx_edid_2;
 
     private Object mLock = new Object();
     private boolean mIsSideband = true;
     private Uri mChannelUri;
     private MyBroadCastReceiver mBroadCastReceiver;
+    private boolean mPopSettingsPrepared;
     private boolean mPopViewPrepared;
     private boolean mResumePrepared;
     private boolean mTvSurfacePrepared;
@@ -198,6 +207,8 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
                     } else {
                         mPopViewPrepared = true;
                     }
+                } else if (MSG_ENABLE_SETTINGS == msg.what) {
+                    mPopSettingsPrepared = true;
                 }
             }
         }
@@ -215,6 +226,7 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         registerReceiver();
 
         initPopWindow();
+        initPopSettingsWindow();
         mCameraFree = true;
     }
 
@@ -232,6 +244,26 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         mPopView.setTouchable(true);
         mPopView.setBackgroundDrawable(new ColorDrawable(0x00000000));
         mPopViewPrepared = false;
+    }
+
+    private void initPopSettingsWindow() {
+        View view = LayoutInflater.from(this).inflate(R.layout.layout_main_pop_settings, null, false);
+        rm_pop_settings = (RoundMenu) view.findViewById(R.id.rm_pop_settings);
+        rm_pop_settings.setOnStateListener(new RoundMenu.onStateListener() {
+            @Override
+            public void collapseEnd() {
+                mPopSettings.dismiss();
+            }
+        });
+        txt_hdmirx_edid_1 = (TextView) view.findViewById(R.id.txt_hdmirx_edid_1);
+        txt_hdmirx_edid_1.setOnClickListener(this);
+        txt_hdmirx_edid_2 = (TextView) view.findViewById(R.id.txt_hdmirx_edid_2);
+        txt_hdmirx_edid_2.setOnClickListener(this);
+        mPopSettings = new PopupWindow(view,
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, true);
+        mPopSettings.setTouchable(true);
+        mPopSettings.setBackgroundDrawable(new ColorDrawable(0x00000000));
+        mPopSettingsPrepared = false;
     }
 
     private void initSideband() {
@@ -418,8 +450,46 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
                     mPopViewPrepared = true;
                 }
             }
+        } else if (txt_hdmirx_edid_1.getId() == v.getId()) {
+            rm_pop_settings.collapse(true);
+            writeHdmiRxEdid(DataUtils.HDMIRX_EDID_1);
+        } else if (txt_hdmirx_edid_2.getId() == v.getId()) {
+            rm_pop_settings.collapse(true);
+            writeHdmiRxEdid(DataUtils.HDMIRX_EDID_2);
+        } else if (mPopSettingsPrepared) {
+            String hdmiInVersion = SystemPropertiesProxy.getString(DataUtils.PERSIST_HDMIRX_EDID,
+                    DataUtils.HDMIRX_EDID_1);
+            if (DataUtils.HDMIRX_EDID_1.equals(hdmiInVersion)) {
+                txt_hdmirx_edid_1.setTextColor(Color.parseColor("#AAAAFF"));
+                txt_hdmirx_edid_2.setTextColor(Color.WHITE);
+            } else if (DataUtils.HDMIRX_EDID_2.equals(hdmiInVersion)) {
+                txt_hdmirx_edid_1.setTextColor(Color.WHITE);
+                txt_hdmirx_edid_2.setTextColor(Color.parseColor("#AAAAFF"));
+            }
+            mPopSettings.showAtLocation(rootView, Gravity.LEFT, 0, 0);
         } else if (mPopViewPrepared) {
             //mPopView.showAtLocation(rootView, Gravity.LEFT, 50, 50);
+        }
+    }
+
+    private void writeHdmiRxEdid(String value) {
+        FileOutputStream file = null;
+        try {
+            file = new FileOutputStream("sys/class/hdmirx/hdmirx/edid");
+            Log.v(TAG, "write hdmirx edid value " + value);
+            file.write(value.getBytes());
+            file.flush();
+            SystemPropertiesProxy.set(DataUtils.PERSIST_HDMIRX_EDID, value);
+        } catch (Exception e) {
+            showToast("set failed");
+            e.printStackTrace();
+        } finally {
+            if (null != file) {
+                try {
+                    file.close();
+                } catch (Exception e1) {
+                }
+            }
         }
     }
 
@@ -890,6 +960,9 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         } else {
             resumeCamera();
         }
+        if (!mPopSettingsPrepared) {
+            mHandler.sendEmptyMessageDelayed(MSG_ENABLE_SETTINGS, DataUtils.MAIN_ENABLE_SETTINGS_DEALY);
+        }
     }
 
     @Override
@@ -909,6 +982,7 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         mHandler.removeMessages(MSG_START_TV);
         mHandler.removeMessages(MSG_CAMERA_CAPTURE);
         mHandler.removeMessages(MSG_REQUEST_SCREEN_SHOT);
+        mHandler.removeMessages(MSG_ENABLE_SETTINGS);
         unregisterReceiver();
     }
 
