@@ -30,6 +30,7 @@ import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 //import android.support.v7.app.AppCompatActivity;
 import android.app.Activity;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
@@ -49,6 +50,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import com.android.rockchip.camera2.util.DataUtils;
 import com.android.rockchip.camera2.util.JniCameraCall;
 import rockchip.hardware.hdmi.V1_0.IHdmi;
 import rockchip.hardware.hdmi.V1_0.IHdmiCallback;
@@ -77,6 +80,8 @@ public class RockchipCamera2 extends Activity {
     private HdmiService mHdmiService;
     private RelativeLayout rootView;
     private boolean mPaused = false;
+    private String mAssignCameraId;
+
     class HdmiCallback extends IHdmiCallback.Stub{
         public  HdmiCallback(){
         }
@@ -97,6 +102,7 @@ public class RockchipCamera2 extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_rockchip_camera2);
+        mAssignCameraId = getIntent().getStringExtra(DataUtils.EXTRA_ASSIGN_CAMERA_ID);
         rootView = (RelativeLayout) findViewById(R.id.root_view);
         mHdmiCallback= new HdmiCallback();
             try {
@@ -417,7 +423,7 @@ public class RockchipCamera2 extends Activity {
                 e.printStackTrace();
             }
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        Log.i(TAG, "openCamera start");
+        Log.i(TAG, "openCamera start getHdmiDeviceId=" + getHdmiDeviceId);
         try {
             if(manager.getCameraIdList().length == 0){
                 Log.i(TAG, "openCamera length == 0");
@@ -425,14 +431,31 @@ public class RockchipCamera2 extends Activity {
             }
             boolean haveHDMI=false;
             String hdmiCameraId="";
+            String alternativeId = "";//备选cameraId
             for (String cameraId : manager.getCameraIdList()) {
                 Log.i(TAG, "cameraId:"+cameraId);
-                if(cameraId.equals(getHdmiDeviceId)){
-                    haveHDMI = true;
-                    hdmiCameraId = cameraId;
-                    Log.i(TAG, "haveHDMI cameraId:"+cameraId);
+                if (TextUtils.isEmpty(mAssignCameraId)) {
+                    if(cameraId.equals(getHdmiDeviceId)){
+                        haveHDMI = true;
+                        hdmiCameraId = cameraId;
+                        Log.i(TAG, "haveHDMI cameraId:"+cameraId);
+                    }
+                } else if (!cameraId.equals(getHdmiDeviceId)) {
+                    alternativeId = cameraId;
+                    if (cameraId.equals(mAssignCameraId)) {
+                        haveHDMI = true;
+                        hdmiCameraId = cameraId;
+                        Log.i(TAG, "have switch HDMI cameraId:"+cameraId);
+                        break;
+                    }
                 }
             }
+            /*if (TextUtils.isEmpty(hdmiCameraId)
+                    && !TextUtils.isEmpty(mAssignCameraId) && !TextUtils.isEmpty(alternativeId)) {
+                haveHDMI = true;
+                hdmiCameraId = alternativeId;
+                Log.i(TAG, "have alternative cameraId:"+mAssignCameraId);
+            }*/
             if(!haveHDMI){
                 return;
             }

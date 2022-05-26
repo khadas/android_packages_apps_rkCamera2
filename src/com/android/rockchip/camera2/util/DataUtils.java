@@ -7,6 +7,8 @@ public class DataUtils {
     public static final long MAIN_REQUEST_SCREENSHOT_DELAYED = 1000;
     public static final long MAIN_ENABLE_SETTINGS_DEALY = 1000;
 
+    public static final String EXTRA_ASSIGN_CAMERA_ID = "extra_assign_cameraid";
+
     public static final int VIDEO_RECORD_BIT_RATE = 6000000;
     public static final int VIDEO_RECORD_FRAME_RATE = 30;
     public static final int AUDIO_RECORD_TOTAL_NUM_TRACKS = 1;
