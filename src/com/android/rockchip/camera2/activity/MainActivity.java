@@ -75,6 +75,9 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
     private TextureView textureView;
     private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
 
+    private final String HDMI_OUT_ACTION = "android.intent.action.HDMI_PLUGGED";
+    private final String DP_OUT_ACTION = "android.intent.action.DP_PLUGGED";
+
     private final int MSG_START_TV = 0;
     private final int MSG_SWITCH_MODE = 1;
     private final int MSG_CAMERA_RECORD = 2;
@@ -219,6 +222,7 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        fullScreen();
         rootView = (RelativeLayout) findViewById(R.id.root_view);
         rootView.setOnClickListener(this);
 
@@ -228,6 +232,17 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         initPopWindow();
         initPopSettingsWindow();
         mCameraFree = true;
+    }
+
+    private void fullScreen() {
+        getWindow().getDecorView().getRootView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_LOW_PROFILE);
     }
 
     private void initPopWindow() {
@@ -263,6 +278,7 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, true);
         mPopSettings.setTouchable(true);
         mPopSettings.setBackgroundDrawable(new ColorDrawable(0x00000000));
+        mPopSettings.setClippingEnabled(false);
         mPopSettingsPrepared = false;
     }
 
@@ -330,6 +346,8 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
         mBroadCastReceiver = new MyBroadCastReceiver();
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+        intentFilter.addAction(HDMI_OUT_ACTION);
+        intentFilter.addAction(DP_OUT_ACTION);
         registerReceiver(mBroadCastReceiver, intentFilter);
     }
 
@@ -994,6 +1012,10 @@ public class MainActivity extends Activity implements View.OnAttachStateChangeLi
             Log.v(TAG, action);
             if (Intent.ACTION_CLOSE_SYSTEM_DIALOGS.equals(action)) {
                 exitApp();
+            } else if (HDMI_OUT_ACTION.equals(action) || DP_OUT_ACTION.equals(action)) {
+                pauseCamera();
+                mAlreadyTvTune = false;
+                resumeSideband();
             }
         }
     }
