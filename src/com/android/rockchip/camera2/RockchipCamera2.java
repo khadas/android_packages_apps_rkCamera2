@@ -86,13 +86,20 @@ public class RockchipCamera2 extends Activity {
         public  HdmiCallback(){
         }
 
-        public void onConnect() throws RemoteException {
-            Log.e(TAG,"onConnect");
+        public void onConnect(String cameraId) throws RemoteException {
+            Log.e(TAG,"onConnect"+cameraId);
             openCamera();
         }
 
-        public void onDisconnect() throws RemoteException {
-            Log.e(TAG,"onDisconnect");
+        public void onFormatChange(String cameraId,int width,int height) throws RemoteException {
+            Log.e(TAG,"onFormatChange"+cameraId);
+            closeCamera();
+	    imageDimension = new Size(width, height);
+            openCamera();
+        }
+
+        public void onDisconnect(String cameraId) throws RemoteException {
+            Log.e(TAG,"onDisconnect"+cameraId);
             closeCamera();
         }
     }
