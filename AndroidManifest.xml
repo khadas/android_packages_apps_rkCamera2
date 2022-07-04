@@ -49,15 +49,6 @@
         </activity>
 
         <activity
-            android:name=".activity.TvActivity"
-            android:configChanges="keyboard|keyboardHidden|screenSize|smallestScreenSize|screenLayout|orientation"
-            android:exported="true"
-            android:launchMode="singleTask"
-            android:resizeableActivity="true"
-            android:screenOrientation="unspecified"
-            android:supportsPictureInPicture="false"/>
-
-        <activity
             android:name=".activity.MainActivity"
             android:configChanges="keyboard|keyboardHidden|screenSize|smallestScreenSize|screenLayout|orientation"
             android:exported="true"
