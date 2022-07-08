@@ -67,6 +67,7 @@ public class MainActivity extends Activity implements
     private boolean mIsDestory;
     private long mLastClickTime;
     private String mCurrentSavePath;
+    private boolean mIsSidebandRecord;
 
     private Handler mHandler = new Handler() {
         @Override
@@ -128,7 +129,29 @@ public class MainActivity extends Activity implements
             public void collapseEnd() {
                 mPopSettings.dismiss();
             }
+
+            @Override
+            public void centerClick() {
+                if (mIsDestory) {
+                    return;
+                }
+                Log.v(TAG, "centerClick mIsSidebandRecord=" + mIsSidebandRecord);
+                if (mIsSidebandRecord) {
+                    stopSidebandRecord(true);
+                } else {
+                    mCurrentSavePath = getSavePath(".mp4");
+                    Bundle bundle = new Bundle();
+                    bundle.putString("status", "1");
+                    bundle.putString("storePath", mCurrentSavePath);
+                    tvView.sendAppPrivateCommand("record", bundle);
+                    rm_pop_settings.setCenterDrawable(R.drawable.ic_record_shutter);
+                    showToast(R.string.btn_record_start);
+                }
+                mIsSidebandRecord = !mIsSidebandRecord;
+                mPopSettings.dismiss();
+            }
         });
+        rm_pop_settings.setCenterDrawable(R.drawable.ic_record_start);
         txt_hdmirx_edid_1 = (TextView) view.findViewById(R.id.txt_hdmirx_edid_1);
         txt_hdmirx_edid_1.setOnClickListener(this);
         txt_hdmirx_edid_2 = (TextView) view.findViewById(R.id.txt_hdmirx_edid_2);
@@ -179,6 +202,7 @@ public class MainActivity extends Activity implements
         intentFilter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
         intentFilter.addAction(HDMI_OUT_ACTION);
         intentFilter.addAction(DP_OUT_ACTION);
+        intentFilter.addAction(Intent.ACTION_HDMIIN_RK_PRIV_CMD);
         registerReceiver(mBroadCastReceiver, intentFilter);
     }
 
@@ -220,6 +244,7 @@ public class MainActivity extends Activity implements
             e.printStackTrace();
         }
         stopHdmiAudioService();
+        stopSidebandRecord(true);
         finish();
         try {
             Thread.sleep(100);
@@ -362,6 +387,22 @@ public class MainActivity extends Activity implements
         sendBroadcast(intent);
     }
 
+    private void stopSidebandRecord(boolean sendStopCmd) {
+        if (!TextUtils.isEmpty(mCurrentSavePath)) {
+            if (sendStopCmd) {
+                Bundle bundle = new Bundle();
+                bundle.putString("status", "0");
+                bundle.putString("storePath", "");
+                tvView.sendAppPrivateCommand("record", bundle);
+            }
+            rm_pop_settings.setCenterDrawable(R.drawable.ic_record_start);
+            addSaveFileToDb(mCurrentSavePath);
+            showToast(mCurrentSavePath);
+            mCurrentSavePath = "";
+            Log.v(TAG, "stopSidebandRecord");
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -377,6 +418,7 @@ public class MainActivity extends Activity implements
         Log.d(TAG, "onPause");
         super.onPause();
         pauseSideband();
+        stopSidebandRecord(true);
     }
 
     @Override
@@ -398,8 +440,15 @@ public class MainActivity extends Activity implements
             if (Intent.ACTION_CLOSE_SYSTEM_DIALOGS.equals(action)) {
                 exitApp();
             } else if (HDMI_OUT_ACTION.equals(action) || DP_OUT_ACTION.equals(action)) {
+                stopSidebandRecord(true);
                 mAlreadyTvTune = false;
                 resumeSideband();
+            } else if (Intent.ACTION_HDMIIN_RK_PRIV_CMD.equals(action)) {
+                action = intent.getStringExtra("action");
+                Log.v(TAG, "receiver: " + action);
+                if ("hdmiinout".equals(action)) {
+                    stopSidebandRecord(false);
+                }
             }
         }
     }
