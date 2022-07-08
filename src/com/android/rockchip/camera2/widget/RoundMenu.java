@@ -17,6 +17,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
@@ -54,6 +55,7 @@ public class RoundMenu extends ViewGroup {
     private long mLastClickTime;
 
     private int mTempTransX = 10;
+    private int mCenterIconPadding = 0;//中心图标的pandding
 
     public RoundMenu(Context context) {
         this(context, null);
@@ -74,8 +76,8 @@ public class RoundMenu extends ViewGroup {
 
     private void init(Context context, AttributeSet attrs) {
         TypedArray ta = context.obtainStyledAttributes(attrs, R.styleable.RoundelMenu);
-        collapsedRadius = ta.getDimensionPixelSize(R.styleable.RoundelMenu_round_menu_collapsedRadius, dp2px(22));
-        expandedRadius = ta.getDimensionPixelSize(R.styleable.RoundelMenu_round_menu_expandedRadius, dp2px(84));
+        collapsedRadius = ta.getDimensionPixelSize(R.styleable.RoundelMenu_round_menu_collapsedRadius, dp2px(32));
+        expandedRadius = ta.getDimensionPixelSize(R.styleable.RoundelMenu_round_menu_expandedRadius, dp2px(120));
         mRoundColor = ta.getColor(R.styleable.RoundelMenu_round_menu_roundColor, Color.GRAY);
         mCenterColor = ta.getColor(R.styleable.RoundelMenu_round_menu_centerColor, Color.parseColor("#ffff8800"));
         mDuration = ta.getInteger(R.styleable.RoundelMenu_round_menu_duration, 400);
@@ -146,7 +148,6 @@ public class RoundMenu extends ViewGroup {
             }
         });
     }
-
 
     public float getExpandProgress() {
         return expandProgress;
@@ -243,9 +244,13 @@ public class RoundMenu extends ViewGroup {
                 double distance = getPointsDistance(touchPoint, center);
                 if (state == STATE_EXPAND) {
                     //展开状态下，如果点击区域与中心点的距离不处于子菜单区域
-                    if (distance > (collapsedRadius + (expandedRadius - collapsedRadius) * expandProgress)
-                            || distance < collapsedRadius) {
+                    if (distance > (collapsedRadius + (expandedRadius - collapsedRadius) * expandProgress)) {
                         collapse(true);//收起菜单
+                        return true;
+                    } else if (distance < collapsedRadius) {
+                        if (!mCanListenerAnim && null != mStateListener) {
+                            mStateListener.centerClick();
+                        }
                         return true;
                     }
                     //展开状态下，如果点击区域处于子菜单区域，则不消费事件
@@ -273,11 +278,11 @@ public class RoundMenu extends ViewGroup {
         x = w / 2;
         y = h / 2;
         center.set(x, y);
-        //中心图标padding设为10dp
-        mCenterDrawable.setBounds(center.x + mTempTransX - (collapsedRadius - dp2px(10)),
-                center.y - (collapsedRadius - dp2px(10)),
-                center.x + mTempTransX + (collapsedRadius - dp2px(10)),
-                center.y + (collapsedRadius - dp2px(10))
+        //中心图标padding设为mCenterIconPadding dp
+        mCenterDrawable.setBounds(center.x + mTempTransX - (collapsedRadius - dp2px(mCenterIconPadding)),
+                center.y - (collapsedRadius - dp2px(mCenterIconPadding)),
+                center.x + mTempTransX + (collapsedRadius - dp2px(mCenterIconPadding)),
+                center.y + (collapsedRadius - dp2px(mCenterIconPadding))
         );
     }
 
@@ -407,6 +412,16 @@ public class RoundMenu extends ViewGroup {
         invalidate();
     }
 
+    public void setCenterDrawable(int resId) {
+        mCenterDrawable = getResources().getDrawable(resId);
+        mCenterDrawable.setBounds(center.x + mTempTransX - (collapsedRadius - dp2px(mCenterIconPadding)),
+                center.y - (collapsedRadius - dp2px(mCenterIconPadding)),
+                center.x + mTempTransX + (collapsedRadius - dp2px(mCenterIconPadding)),
+                center.y + (collapsedRadius - dp2px(mCenterIconPadding))
+        );
+        invalidate();
+    }
+
     public class OvalOutline extends ViewOutlineProvider {
 
         public OvalOutline() {
@@ -443,5 +458,7 @@ public class RoundMenu extends ViewGroup {
 
     public interface onStateListener {
         public void collapseEnd();
+
+        public void centerClick();
     }
 }
