@@ -81,6 +81,7 @@ public class RockchipCamera2 extends Activity {
     private RelativeLayout rootView;
     private boolean mPaused = false;
     private String mAssignCameraId;
+    private String mAssignCameraType;
 
     class HdmiCallback extends IHdmiCallback.Stub{
         public  HdmiCallback(){
@@ -110,6 +111,7 @@ public class RockchipCamera2 extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_rockchip_camera2);
         mAssignCameraId = getIntent().getStringExtra(DataUtils.EXTRA_ASSIGN_CAMERA_ID);
+        mAssignCameraType = getIntent().getStringExtra(DataUtils.EXTRA_ASSIGN_CAMERA_TYPR);
         rootView = (RelativeLayout) findViewById(R.id.root_view);
         mHdmiCallback= new HdmiCallback();
             try {
@@ -439,6 +441,20 @@ public class RockchipCamera2 extends Activity {
             boolean haveHDMI=false;
             String hdmiCameraId="";
             String alternativeId = "";//备选cameraId
+            if ("0".equals(mAssignCameraType)) {
+                String[] cameraIds = manager.getCameraIdList();
+                if (null != cameraIds && cameraIds.length > 0) {
+                    hdmiCameraId = cameraIds[cameraIds.length-1];
+                    haveHDMI = true;
+                }
+            } else if ("1".equals(mAssignCameraType)) {
+                hdmiCameraId = getHdmiDeviceId;
+                if (null == hdmiCameraId) {
+                    hdmiCameraId = "";
+                } else {
+                    haveHDMI = true;
+                }
+            } else {
             for (String cameraId : manager.getCameraIdList()) {
                 Log.i(TAG, "cameraId:"+cameraId);
                 if (TextUtils.isEmpty(mAssignCameraId)) {
@@ -457,6 +473,7 @@ public class RockchipCamera2 extends Activity {
                     }
                 }
             }
+            }
             /*if (TextUtils.isEmpty(hdmiCameraId)
                     && !TextUtils.isEmpty(mAssignCameraId) && !TextUtils.isEmpty(alternativeId)) {
                 haveHDMI = true;
@@ -466,6 +483,7 @@ public class RockchipCamera2 extends Activity {
             if(!haveHDMI){
                 return;
             }
+            Log.w(TAG, "open cameraId:"+hdmiCameraId);
             CameraCharacteristics characteristics = manager.getCameraCharacteristics(hdmiCameraId);
             StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             assert map != null;
