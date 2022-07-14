@@ -8,6 +8,7 @@ public class DataUtils {
     public static final long MAIN_ENABLE_SETTINGS_DEALY = 1000;
 
     public static final String EXTRA_ASSIGN_CAMERA_ID = "extra_assign_cameraid";
+    public static final String EXTRA_ASSIGN_CAMERA_TYPR = "extra_assign_cameratype";//0:mipi 1:rx
 
     public static final int VIDEO_RECORD_BIT_RATE = 6000000;
     public static final int VIDEO_RECORD_FRAME_RATE = 30;
