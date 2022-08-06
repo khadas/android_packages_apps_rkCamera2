@@ -86,7 +86,6 @@ public class MainActivity extends Activity implements
                             && !mAlreadyTvTune) {
                         mAlreadyTvTune = true;
                         tvView.tune(DataUtils.INPUT_ID, mChannelUri);
-                        startHdmiAudioService();
                     }
                 } else if (MSG_ENABLE_SETTINGS == msg.what) {
                     mPopSettingsPrepared = true;
@@ -186,7 +185,6 @@ public class MainActivity extends Activity implements
     }
 
     private void pauseSideband() {
-        stopHdmiAudioService();
         mResumePrepared = false;
         mAlreadyTvTune = false;
         if (null != tvView) {
@@ -220,30 +218,12 @@ public class MainActivity extends Activity implements
         Toast.makeText(this, ss, Toast.LENGTH_SHORT).show();
     }
 
-    private void startHdmiAudioService() {
-        Log.v(TAG, "startHdmiAudioService");
-        SystemPropertiesProxy.set("vendor.hdmiin.audiorate", "48KHZ");
-        Intent intent = new Intent();
-        ComponentName cn = new ComponentName(DataUtils.HDMIIN_AUDIO_PACKAGE_NAME, DataUtils.HDMIIN_AUDIO_CLS_NAME);
-        intent.setComponent(cn);
-        startForegroundService(intent);
-    }
-
-    private void stopHdmiAudioService() {
-        Log.v(TAG, "stopHdmiAudioService");
-        Intent intent = new Intent();
-        ComponentName cn = new ComponentName(DataUtils.HDMIIN_AUDIO_PACKAGE_NAME, DataUtils.HDMIIN_AUDIO_CLS_NAME);
-        intent.setComponent(cn);
-        stopService(intent);
-    }
-
     private void exitApp() {
         try {
             Thread.sleep(50);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        stopHdmiAudioService();
         stopSidebandRecord(true);
         finish();
         try {
