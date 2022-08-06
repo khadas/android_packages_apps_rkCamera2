@@ -1,5 +1,10 @@
 package com.android.rockchip.camera2.util;
 
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.util.Log;
+
 public class DataUtils {
     public static final String INPUT_ID = "com.example.partnersupportsampletvinput/.SampleTvInputService/HW0";
     public static final long LIMIT_DOUBLE_CLICK_TIME = 1000;
@@ -25,4 +30,20 @@ public class DataUtils {
     public static final String HDMIRX_EDID_1 = "1";
     public static final String HDMIRX_EDID_2 = "2";
 
+    public static void startHdmiAudioService(Context context) {
+        Log.v("HdmiIn", "startHdmiAudioService");
+        SystemPropertiesProxy.set("vendor.hdmiin.audiorate", "48KHZ");
+        Intent intent = new Intent();
+        ComponentName cn = new ComponentName(DataUtils.HDMIIN_AUDIO_PACKAGE_NAME, DataUtils.HDMIIN_AUDIO_CLS_NAME);
+        intent.setComponent(cn);
+        context.startForegroundService(intent);
+    }
+
+    public static void stopHdmiAudioService(Context context) {
+        Log.v("HdmiIn", "stopHdmiAudioService");
+        Intent intent = new Intent();
+        ComponentName cn = new ComponentName(DataUtils.HDMIIN_AUDIO_PACKAGE_NAME, DataUtils.HDMIIN_AUDIO_CLS_NAME);
+        intent.setComponent(cn);
+        context.stopService(intent);
+    }
 }
