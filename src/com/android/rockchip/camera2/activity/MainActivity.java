@@ -420,13 +420,19 @@ public class MainActivity extends Activity implements
             if (Intent.ACTION_CLOSE_SYSTEM_DIALOGS.equals(action)) {
                 exitApp();
             } else if (HDMI_OUT_ACTION.equals(action) || DP_OUT_ACTION.equals(action)) {
+                if (null != mPopSettings && mPopSettings.isShowing()) {
+                    mPopSettings.dismiss();
+                }
                 stopSidebandRecord(true);
                 mAlreadyTvTune = false;
                 resumeSideband();
             } else if (Intent.ACTION_HDMIIN_RK_PRIV_CMD.equals(action)) {
                 action = intent.getStringExtra("action");
                 Log.v(TAG, "receiver: " + action);
-                if ("hdmiinout".equals(action)) {
+                if (null != mPopSettings && mPopSettings.isShowing()) {
+                    mPopSettings.dismiss();
+                }
+                if ("hdmiinout".equals(action) || "sourcechange".equals(action)) {
                     stopSidebandRecord(false);
                 }
             }
