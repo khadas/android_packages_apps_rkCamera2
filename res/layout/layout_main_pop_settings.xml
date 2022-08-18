@@ -2,13 +2,96 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:RoundelMenu="http://schemas.android.com/apk/res-auto"
     android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:orientation="vertical">
+
+    <RelativeLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="#CCCCCC"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <TextView
+            android:id="@+id/txt_staus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:enabled="false"
+            android:padding="10dp"
+            android:text="点击相应按钮切换状态"
+            android:textColor="@android:color/black" />
+
+        <Button
+            android:id="@+id/btn_edid"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/txt_staus"
+            android:layout_alignLeft="@+id/txt_staus"
+            android:layout_alignRight="@+id/txt_staus"
+            android:layout_marginTop="10dp"
+            android:paddingTop="25dp"
+            android:paddingBottom="25dp"
+            android:text="EDID" />
+
+        <Button
+            android:id="@+id/btn_record"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/btn_edid"
+            android:layout_alignLeft="@+id/txt_staus"
+            android:layout_alignRight="@+id/txt_staus"
+            android:layout_marginTop="10dp"
+            android:paddingTop="25dp"
+            android:paddingBottom="25dp"
+            android:text="@string/btn_record" />
+
+        <Button
+            android:id="@+id/btn_pq"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/btn_record"
+            android:layout_alignLeft="@+id/txt_staus"
+            android:layout_alignRight="@+id/txt_staus"
+            android:layout_marginTop="10dp"
+            android:paddingTop="25dp"
+            android:paddingBottom="25dp"
+            android:text="@string/btn_pq"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/btn_lf_range"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/btn_pq"
+            android:layout_alignLeft="@+id/txt_staus"
+            android:layout_alignRight="@+id/txt_staus"
+            android:layout_marginTop="10dp"
+            android:paddingTop="25dp"
+            android:paddingBottom="25dp"
+            android:text="@string/btn_lf_range"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/btn_calc_luma"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/btn_lf_range"
+            android:layout_alignLeft="@+id/txt_staus"
+            android:layout_alignRight="@+id/txt_staus"
+            android:layout_marginTop="10dp"
+            android:paddingTop="25dp"
+            android:paddingBottom="25dp"
+            android:text="@string/btn_calc_luma"
+            android:visibility="gone" />
+    </RelativeLayout>
 
     <com.android.rockchip.camera2.widget.RoundMenu
         android:id="@+id/rm_pop_settings"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:visibility="gone">
 
         <TextView
             android:id="@+id/txt_hdmirx_edid_1"

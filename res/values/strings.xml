@@ -8,6 +8,15 @@
     <string name="btn_record">record</string>
     <string name="btn_record_start">start record</string>
     <string name="btn_record_stop">end record</string>
+    <string name="btn_pq">pq</string>
+    <string name="btn_pq_start">start pq</string>
+    <string name="btn_pq_stop">end pq</string>
+    <string name="btn_calc_luma">luma</string>
+    <string name="btn_calc_luma_start">start luma</string>
+    <string name="btn_calc_luma_stop">end luma</string>
+    <string name="btn_lf_range">assign range</string>
+    <string name="btn_lf_range_start">start assign range</string>
+    <string name="btn_lf_range_stop">end assign range</string>
     <string name="btn_screenshot">screenshot</string>
     <string name="notification_screen_record">screen record</string>
     <string name="save_failed">save failed</string>
