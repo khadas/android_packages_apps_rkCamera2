@@ -1,11 +1,11 @@
 package com.android.rockchip.camera2.activity;
 
-import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.media.tv.TvContract;
@@ -29,6 +29,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.android.rockchip.camera2.R;
+import com.android.rockchip.camera2.util.BitmapUtil;
 import com.android.rockchip.camera2.util.DataUtils;
 import com.android.rockchip.camera2.util.SystemPropertiesProxy;
 import com.android.rockchip.camera2.widget.RoundMenu;
@@ -40,16 +41,17 @@ import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-public class MainActivity extends Activity implements
-        View.OnAttachStateChangeListener, View.OnClickListener {
-
-    private static final String TAG = "MainActivity";
+public class MainActivity extends BaseActivity implements
+        View.OnAttachStateChangeListener, View.OnClickListener,
+        BaseActivity.ScreenShotCallBack {
+    protected String TAG = "MainActivity";
 
     private final String HDMI_OUT_ACTION = "android.intent.action.HDMI_PLUGGED";
     private final String DP_OUT_ACTION = "android.intent.action.DP_PLUGGED";
 
     private final int MSG_START_TV = 0;
     private final int MSG_ENABLE_SETTINGS = 1;
+    private final int MSG_SCREENSHOT_FINISH = 2;
 
     private RelativeLayout rootView;
     private TvView tvView;
@@ -58,6 +60,7 @@ public class MainActivity extends Activity implements
     private TextView txt_hdmirx_edid_1;
     private TextView txt_hdmirx_edid_2;
     private Button btn_edid;
+    private Button btn_screenshot;
     private Button btn_record;
     private Button btn_pq;
     private Button btn_calc_luma;
@@ -75,6 +78,38 @@ public class MainActivity extends Activity implements
     private String mCurrentSavePath;
     private boolean mIsSidebandRecord;
     private int mPqMode = DataUtils.PQ_OFF;
+    private boolean mIgnorePause;
+
+    private class MyBitmapSaveThread extends Thread {
+        private Bitmap bitmap;
+
+        MyBitmapSaveThread(Bitmap bitmap) {
+            this.bitmap = bitmap;
+        }
+
+        @Override
+        public void run() {
+            String path = getSavePath(".jpg");
+            BitmapUtil.saveBitmap2file(bitmap, path);
+            if (null != bitmap && !bitmap.isRecycled()) {
+                bitmap.recycle();
+            }
+            Message message = new Message();
+            message.what = MSG_SCREENSHOT_FINISH;
+            message.obj = path;
+            mHandler.sendMessageDelayed(message, DataUtils.MAIN_REQUEST_SCREENSHOT_DELAYED);
+        }
+    }
+
+    @Override
+    public void onScreenshotFinish(Bitmap bitmap) {
+        if (null == bitmap) {
+            btn_screenshot.setEnabled(true);
+            showToast(R.string.screenshot_failed);
+        } else {
+            new MyBitmapSaveThread(bitmap).start();
+        }
+    }
 
     private Handler mHandler = new Handler() {
         @Override
@@ -96,6 +131,9 @@ public class MainActivity extends Activity implements
                     }
                 } else if (MSG_ENABLE_SETTINGS == msg.what) {
                     mPopSettingsPrepared = true;
+                } else if (MSG_SCREENSHOT_FINISH == msg.what) {
+                    showToast(String.valueOf(msg.obj));
+                    btn_screenshot.setEnabled(true);
                 }
             }
         }
@@ -164,6 +202,11 @@ public class MainActivity extends Activity implements
         //normal ui
         btn_edid = view.findViewById(R.id.btn_edid);
         btn_edid.setOnClickListener(this);
+        btn_screenshot = view.findViewById(R.id.btn_screenshot);
+        btn_screenshot.setOnClickListener(this);
+        if (DataUtils.DEBUG_SCREENSHOT) {
+            btn_screenshot.setVisibility(View.VISIBLE);
+        }
         btn_record = view.findViewById(R.id.btn_record);
         btn_record.setOnClickListener(this);
         btn_pq = view.findViewById(R.id.btn_pq);
@@ -303,6 +346,11 @@ public class MainActivity extends Activity implements
             } else if (DataUtils.HDMIRX_EDID_2.equals(hdmiInVersion)) {
                 writeHdmiRxEdid(DataUtils.HDMIRX_EDID_1);
             }
+            mPopSettings.dismiss();
+        } else if (btn_screenshot.getId() == v.getId()) {
+            btn_screenshot.setEnabled(false);
+            mIgnorePause = true;
+            startScreenShot(this);
             mPopSettings.dismiss();
         } else if (btn_record.getId() == v.getId()) {
             if (mIsSidebandRecord) {
@@ -526,7 +574,11 @@ public class MainActivity extends Activity implements
                 mPqMode |= DataUtils.PQ_LF_RANGE;
             }
         }
-        resumeSideband();
+        if (mIgnorePause) {
+            mIgnorePause = false;
+        } else {
+            resumeSideband();
+        }
         if (!mPopSettingsPrepared) {
             mHandler.sendEmptyMessageDelayed(MSG_ENABLE_SETTINGS, DataUtils.MAIN_ENABLE_SETTINGS_DEALY);
         }
@@ -536,8 +588,10 @@ public class MainActivity extends Activity implements
     protected void onPause() {
         Log.d(TAG, "onPause");
         super.onPause();
-        pauseSideband();
-        stopSidebandRecord(true);
+        if (!mIgnorePause) {
+            pauseSideband();
+            stopSidebandRecord(true);
+        }
     }
 
     @Override
@@ -547,6 +601,7 @@ public class MainActivity extends Activity implements
         mIsDestory = true;
         mHandler.removeMessages(MSG_START_TV);
         mHandler.removeMessages(MSG_ENABLE_SETTINGS);
+        mHandler.removeMessages(MSG_SCREENSHOT_FINISH);
         unregisterReceiver();
     }
 

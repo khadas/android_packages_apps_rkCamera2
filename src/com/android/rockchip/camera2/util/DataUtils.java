@@ -30,6 +30,8 @@ public class DataUtils {
     public static final String HDMIRX_EDID_1 = "1";
     public static final String HDMIRX_EDID_2 = "2";
 
+    public static final boolean DEBUG_SCREENSHOT = false;
+
     public static final boolean DEBUG_PQ = false;
     public static final boolean DEBUG_PQ_MODIFY_CONFIG = true;
     public static final String PERSIST_RKPQ_ENABLE = "persist.vendor.rkpq.enable";
