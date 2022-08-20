@@ -20,4 +20,5 @@
     <string name="btn_screenshot">screenshot</string>
     <string name="notification_screen_record">screen record</string>
     <string name="save_failed">save failed</string>
+    <string name="screenshot_failed">screenshot failed</string>
 </resources>

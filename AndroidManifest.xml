@@ -4,6 +4,9 @@
     android:sharedUserId="android.uid.system"
     package="com.android.rockchip.camera2">
 
+    <uses-sdk android:minSdkVersion="19"
+        android:targetSdkVersion="28"/>
+
         <uses-permission android:name="android.permission.CAMERA" />
         <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
