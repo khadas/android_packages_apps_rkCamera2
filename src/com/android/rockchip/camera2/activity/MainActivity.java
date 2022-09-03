@@ -1,13 +1,14 @@
 package com.android.rockchip.camera2.activity;
 
+import android.app.Activity;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.media.MediaMetadataRetriever;
 import android.media.tv.TvContract;
 import android.media.tv.TvView;
 import android.net.Uri;
@@ -40,10 +41,10 @@ import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.concurrent.TimeUnit;
 
-public class MainActivity extends BaseActivity implements
-        View.OnAttachStateChangeListener, View.OnClickListener,
-        BaseActivity.ScreenShotCallBack {
+public class MainActivity extends Activity implements
+        View.OnAttachStateChangeListener, View.OnClickListener {
     protected String TAG = "MainActivity";
 
     private final String HDMI_OUT_ACTION = "android.intent.action.HDMI_PLUGGED";
@@ -51,7 +52,8 @@ public class MainActivity extends BaseActivity implements
 
     private final int MSG_START_TV = 0;
     private final int MSG_ENABLE_SETTINGS = 1;
-    private final int MSG_SCREENSHOT_FINISH = 2;
+    private final int MSG_SCREENSHOT_START = 2;
+    private final int MSG_SCREENSHOT_FINISH = 3;
 
     private RelativeLayout rootView;
     private TvView tvView;
@@ -78,7 +80,6 @@ public class MainActivity extends BaseActivity implements
     private String mCurrentSavePath;
     private boolean mIsSidebandRecord;
     private int mPqMode = DataUtils.PQ_OFF;
-    private boolean mIgnorePause;
 
     private class MyBitmapSaveThread extends Thread {
         private Bitmap bitmap;
@@ -90,24 +91,16 @@ public class MainActivity extends BaseActivity implements
         @Override
         public void run() {
             String path = getSavePath(".jpg");
+            Log.v(TAG, "start save to " + path);
             BitmapUtil.saveBitmap2file(bitmap, path);
             if (null != bitmap && !bitmap.isRecycled()) {
                 bitmap.recycle();
             }
+            addSaveFileToDb(path);
             Message message = new Message();
             message.what = MSG_SCREENSHOT_FINISH;
             message.obj = path;
             mHandler.sendMessageDelayed(message, DataUtils.MAIN_REQUEST_SCREENSHOT_DELAYED);
-        }
-    }
-
-    @Override
-    public void onScreenshotFinish(Bitmap bitmap) {
-        if (null == bitmap) {
-            btn_screenshot.setEnabled(true);
-            showToast(R.string.screenshot_failed);
-        } else {
-            new MyBitmapSaveThread(bitmap).start();
         }
     }
 
@@ -131,6 +124,14 @@ public class MainActivity extends BaseActivity implements
                     }
                 } else if (MSG_ENABLE_SETTINGS == msg.what) {
                     mPopSettingsPrepared = true;
+                } else if (MSG_SCREENSHOT_START == msg.what) {
+                    Bitmap bitmap = startScreenShot(getSaveDir() + "hdmiin.temp");
+                    if (null == bitmap) {
+                        btn_screenshot.setEnabled(true);
+                        showToast(R.string.screenshot_failed);
+                    } else {
+                        new MyBitmapSaveThread(bitmap).start();
+                    }
                 } else if (MSG_SCREENSHOT_FINISH == msg.what) {
                     showToast(String.valueOf(msg.obj));
                     btn_screenshot.setEnabled(true);
@@ -204,9 +205,6 @@ public class MainActivity extends BaseActivity implements
         btn_edid.setOnClickListener(this);
         btn_screenshot = view.findViewById(R.id.btn_screenshot);
         btn_screenshot.setOnClickListener(this);
-        if (DataUtils.DEBUG_SCREENSHOT) {
-            btn_screenshot.setVisibility(View.VISIBLE);
-        }
         btn_record = view.findViewById(R.id.btn_record);
         btn_record.setOnClickListener(this);
         btn_pq = view.findViewById(R.id.btn_pq);
@@ -348,10 +346,11 @@ public class MainActivity extends BaseActivity implements
             }
             mPopSettings.dismiss();
         } else if (btn_screenshot.getId() == v.getId()) {
-            btn_screenshot.setEnabled(false);
-            mIgnorePause = true;
-            startScreenShot(this);
             mPopSettings.dismiss();
+            btn_screenshot.setEnabled(false);
+            mHandler.removeMessages(MSG_SCREENSHOT_START);
+            mHandler.sendEmptyMessageDelayed(MSG_SCREENSHOT_START,
+                    DataUtils.MAIN_REQUEST_SCREENSHOT_START_DELAYED);
         } else if (btn_record.getId() == v.getId()) {
             if (mIsSidebandRecord) {
                 stopSidebandRecord(true);
@@ -437,6 +436,33 @@ public class MainActivity extends BaseActivity implements
         }
     }
 
+    private Bitmap startScreenShot(String tempPath) {
+        Bitmap bitmap = null;
+        MediaMetadataRetriever mediaMetadataRetriever = null;
+        try {
+            Log.v(TAG, "==========start capture=======");
+            long timeLimit = 1;
+            int milliTime = 200;
+            String cmd = "screenrecord --time-limit " + timeLimit + " --capture-hdmiin " + milliTime + " " + tempPath;
+            Process p = Runtime.getRuntime().exec(cmd);
+            p.waitFor(timeLimit + 1, TimeUnit.SECONDS);
+            mediaMetadataRetriever = new MediaMetadataRetriever();
+            mediaMetadataRetriever.setDataSource(tempPath);
+            String duration = mediaMetadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            bitmap = mediaMetadataRetriever.getFrameAtTime(Long.parseLong(duration) * 1000, MediaMetadataRetriever.OPTION_CLOSEST);
+            File file = new File(tempPath);
+            boolean result = file.delete();
+            Log.v(TAG, "==========end capture=======" + result + "=" + duration);
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (mediaMetadataRetriever != null) {
+                mediaMetadataRetriever.release();
+            }
+        }
+        return bitmap;
+    }
+
     private void writeHdmiRxEdid(String value) {
         FileOutputStream file = null;
         try {
@@ -491,16 +517,20 @@ public class MainActivity extends BaseActivity implements
     }
 
     private String getSavePath(String suffix) {
+        String storagePath = getSaveDir();
+        SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd_HHmmss");//yyyyMMdd_HHmmssSSS
+        return storagePath + format.format(new Date(System.currentTimeMillis()))
+                + suffix;
+    }
+
+    private String getSaveDir() {
         File rootPath = Environment.getExternalStorageDirectory();
         File storagePath = new File(rootPath, DataUtils.STORAGE_PATH_NAME);
         if (null != storagePath && !storagePath.exists()) {
             boolean ret = storagePath.mkdirs();
             Log.v(TAG, "create " + storagePath.getAbsolutePath() + " " + ret);
         }
-        SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd_HHmmss");//yyyyMMdd_HHmmssSSS
-        return storagePath.getAbsolutePath() + "/"
-                + format.format(new Date(System.currentTimeMillis()))
-                + suffix;
+        return storagePath.getAbsolutePath() + "/";
     }
 
     private void addSaveFileToDb(String filePath) {
@@ -574,11 +604,7 @@ public class MainActivity extends BaseActivity implements
                 mPqMode |= DataUtils.PQ_LF_RANGE;
             }
         }
-        if (mIgnorePause) {
-            mIgnorePause = false;
-        } else {
-            resumeSideband();
-        }
+        resumeSideband();
         if (!mPopSettingsPrepared) {
             mHandler.sendEmptyMessageDelayed(MSG_ENABLE_SETTINGS, DataUtils.MAIN_ENABLE_SETTINGS_DEALY);
         }
@@ -588,10 +614,8 @@ public class MainActivity extends BaseActivity implements
     protected void onPause() {
         Log.d(TAG, "onPause");
         super.onPause();
-        if (!mIgnorePause) {
-            pauseSideband();
-            stopSidebandRecord(true);
-        }
+        pauseSideband();
+        stopSidebandRecord(true);
     }
 
     @Override
@@ -601,6 +625,7 @@ public class MainActivity extends BaseActivity implements
         mIsDestory = true;
         mHandler.removeMessages(MSG_START_TV);
         mHandler.removeMessages(MSG_ENABLE_SETTINGS);
+        mHandler.removeMessages(MSG_SCREENSHOT_START);
         mHandler.removeMessages(MSG_SCREENSHOT_FINISH);
         unregisterReceiver();
     }
