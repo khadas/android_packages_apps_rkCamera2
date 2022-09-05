@@ -18,6 +18,7 @@
     <string name="btn_lf_range_start">start assign range</string>
     <string name="btn_lf_range_stop">end assign range</string>
     <string name="btn_screenshot">screenshot</string>
+    <string name="btn_pip">PIP</string>
     <string name="notification_screen_record">screen record</string>
     <string name="save_failed">save failed</string>
     <string name="screenshot_failed">screenshot failed</string>

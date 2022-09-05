@@ -58,7 +58,7 @@
             android:launchMode="singleTask"
             android:resizeableActivity="true"
             android:screenOrientation="unspecified"
-            android:supportsPictureInPicture="false"/>
+            android:supportsPictureInPicture="true"/>
 
         <service
             android:exported="true"
