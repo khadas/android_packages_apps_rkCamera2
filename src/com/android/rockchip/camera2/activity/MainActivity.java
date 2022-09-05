@@ -1,13 +1,25 @@
 package com.android.rockchip.camera2.activity;
 
 import android.app.Activity;
+import android.app.PictureInPictureParams;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Point;
+import android.graphics.SurfaceTexture;
 import android.graphics.drawable.ColorDrawable;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CameraMetadata;
+import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.MediaMetadataRetriever;
 import android.media.tv.TvContract;
 import android.media.tv.TvView;
@@ -15,14 +27,23 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Message;
+import android.os.RemoteException;
+import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.util.Log;
+import android.util.Rational;
+import android.util.Size;
+import android.view.Display;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.Surface;
+import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.PopupWindow;
 import android.widget.RelativeLayout;
@@ -40,8 +61,13 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import rockchip.hardware.hdmi.V1_0.IHdmi;
+import rockchip.hardware.hdmi.V1_0.IHdmiCallback;
 
 public class MainActivity extends Activity implements
         View.OnAttachStateChangeListener, View.OnClickListener {
@@ -49,14 +75,18 @@ public class MainActivity extends Activity implements
 
     private final String HDMI_OUT_ACTION = "android.intent.action.HDMI_PLUGGED";
     private final String DP_OUT_ACTION = "android.intent.action.DP_PLUGGED";
+    private final int MODE_TV = 0;
+    private final int MODE_CAMERA = 1;
 
     private final int MSG_START_TV = 0;
     private final int MSG_ENABLE_SETTINGS = 1;
     private final int MSG_SCREENSHOT_START = 2;
     private final int MSG_SCREENSHOT_FINISH = 3;
+    private final int MSG_SWITCH_MODE = 4;
 
     private RelativeLayout rootView;
     private TvView tvView;
+    private TextureView textureView;
     private PopupWindow mPopSettings;
     private RoundMenu rm_pop_settings;
     private TextView txt_hdmirx_edid_1;
@@ -64,6 +94,7 @@ public class MainActivity extends Activity implements
     private Button btn_edid;
     private Button btn_screenshot;
     private Button btn_record;
+    private Button btn_pip;
     private Button btn_pq;
     private Button btn_calc_luma;
     private Button btn_lf_range;
@@ -80,6 +111,17 @@ public class MainActivity extends Activity implements
     private String mCurrentSavePath;
     private boolean mIsSidebandRecord;
     private int mPqMode = DataUtils.PQ_OFF;
+    private WindowManager mWindowManager;
+    private PictureInPictureParams.Builder mPictureInPictureParamsBuilder;
+    private HdmiCallback mHdmiCallback;
+    private int mCameraSensorOrientation;
+    private CameraDevice cameraDevice;
+    private CameraCaptureSession cameraCaptureSessions;
+    private CaptureRequest.Builder captureRequestBuilder;
+    private Size imageDimension = new Size(1920, 1080);
+    private Handler mBackgroundHandler;
+    private HandlerThread mBackgroundThread;
+    private boolean mExitAppWithPip;
 
     private class MyBitmapSaveThread extends Thread {
         private Bitmap bitmap;
@@ -101,6 +143,28 @@ public class MainActivity extends Activity implements
             message.what = MSG_SCREENSHOT_FINISH;
             message.obj = path;
             mHandler.sendMessageDelayed(message, DataUtils.MAIN_REQUEST_SCREENSHOT_DELAYED);
+        }
+    }
+
+    class HdmiCallback extends IHdmiCallback.Stub {
+        public HdmiCallback() {
+        }
+
+        public void onConnect(String cameraId) throws RemoteException {
+            Log.e(TAG, "onConnect" + cameraId);
+            openCamera();
+        }
+
+        public void onFormatChange(String cameraId, int width, int height) throws RemoteException {
+            Log.e(TAG, "onFormatChange" + cameraId);
+            closeCamera();
+            imageDimension = new Size(width, height);
+            openCamera();
+        }
+
+        public void onDisconnect(String cameraId) throws RemoteException {
+            Log.e(TAG, "onDisconnect" + cameraId);
+            closeCamera();
         }
     }
 
@@ -135,6 +199,15 @@ public class MainActivity extends Activity implements
                 } else if (MSG_SCREENSHOT_FINISH == msg.what) {
                     showToast(String.valueOf(msg.obj));
                     btn_screenshot.setEnabled(true);
+                } else if (MSG_SWITCH_MODE == msg.what) {
+                    Log.v(TAG, "switch mode to " + (msg.arg1 == MODE_TV ? "tv" : "camera"));
+                    if (msg.arg1 == MODE_CAMERA) {
+                        pauseSideband();
+                        resumeCamera();
+                    } else if (msg.arg1 == MODE_TV) {
+                        pauseCamera();
+                        resumeSideband();
+                    }
                 }
             }
         }
@@ -153,6 +226,8 @@ public class MainActivity extends Activity implements
         registerReceiver();
 
         initPopSettingsWindow();
+        mWindowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+        mExitAppWithPip = false;
     }
 
     private void fullScreen() {
@@ -207,6 +282,8 @@ public class MainActivity extends Activity implements
         btn_screenshot.setOnClickListener(this);
         btn_record = view.findViewById(R.id.btn_record);
         btn_record.setOnClickListener(this);
+        btn_pip = view.findViewById(R.id.btn_pip);
+        btn_pip.setOnClickListener(this);
         btn_pq = view.findViewById(R.id.btn_pq);
         btn_pq.setOnClickListener(this);
         btn_calc_luma = view.findViewById(R.id.btn_calc_luma);
@@ -242,6 +319,15 @@ public class MainActivity extends Activity implements
         Log.v(TAG, "resumeSideband");
     }
 
+    private void resumeCamera() {
+        if (textureView == null) {
+            registerHdmiCallback();
+            createTextureView();
+        }
+        startBackgroundThread();
+        Log.v(TAG, "resumeCamera");
+    }
+
     private void pauseSideband() {
         mResumePrepared = false;
         mAlreadyTvTune = false;
@@ -250,6 +336,19 @@ public class MainActivity extends Activity implements
             rootView.removeView(tvView);
         }
         Log.v(TAG, "pauseSideband");
+    }
+
+    private void pauseCamera() {
+        Log.v(TAG, "pauseCamera start");
+        unregisterHdmiCallback();
+        closeCamera();
+        // JniCameraCall.closeDevice();
+        stopBackgroundThread();
+        if (textureView != null) {
+            rootView.removeView(textureView);
+            textureView = null;
+        }
+        Log.v(TAG, "pauseCamera end");
     }
 
     private void registerReceiver() {
@@ -358,6 +457,12 @@ public class MainActivity extends Activity implements
                 startSidebandRecord();
             }
             mPopSettings.dismiss();
+        } else if (btn_pip.getId() == v.getId()) {
+            /* already do in onPause
+              pauseSideband();
+              stopSidebandRecord(true);
+            */
+            enterPiPMode();
         } else if (btn_pq.getId() == v.getId()) {
             int currentPqMode = mPqMode;
             String value = "";
@@ -416,6 +521,11 @@ public class MainActivity extends Activity implements
                 btn_record.setText("录像:开启中");
             } else {
                 btn_record.setText("录像:未开启");
+            }
+            if (isInPictureInPictureMode()) {
+                btn_record.setEnabled(false);
+            } else {
+                btn_record.setEnabled(true);
             }
             if ((mPqMode & DataUtils.PQ_NORMAL) == DataUtils.PQ_NORMAL) {
                 btn_pq.setText("  PQ:开启中");
@@ -533,6 +643,16 @@ public class MainActivity extends Activity implements
         return storagePath.getAbsolutePath() + "/";
     }
 
+    private void switchPreviewMode(int previewMode, long delayMillis) {
+        if (null != mPopSettings && mPopSettings.isShowing()) {
+            mPopSettings.dismiss();
+        }
+        Message msg = new Message();
+        msg.what = MSG_SWITCH_MODE;
+        msg.arg1 = previewMode;
+        mHandler.sendMessageDelayed(msg, delayMillis);
+    }
+
     private void addSaveFileToDb(String filePath) {
         if (TextUtils.isEmpty(filePath)) {
             return;
@@ -585,6 +705,237 @@ public class MainActivity extends Activity implements
         }
     }
 
+    private void registerHdmiCallback() {
+        if (null == mHdmiCallback) {
+            mHdmiCallback = new HdmiCallback();
+        }
+        try {
+            IHdmi service = IHdmi.getService(true);
+            service.registerListener((IHdmiCallback) mHdmiCallback);
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void unregisterHdmiCallback() {
+        if (null == mHdmiCallback) {
+            return;
+        }
+        try {
+            IHdmi service = IHdmi.getService(true);
+            service.unregisterListener((IHdmiCallback) mHdmiCallback);
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void createTextureView() {
+        Log.d(TAG, "recreatTextureview");
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Log.i(TAG, "textureView remove");
+                if (textureView != null) {
+                    rootView.removeView(textureView);
+                    textureView = null;
+                }
+                textureView = new TextureView(MainActivity.this);
+                textureView.setOnClickListener(MainActivity.this);
+                RelativeLayout.LayoutParams layoutParams = new RelativeLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+                textureView.setLayoutParams(layoutParams);
+                rootView.addView(textureView, 0);
+                textureView.setSurfaceTextureListener(textureListener);
+            }
+        });
+    }
+
+    TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
+        @Override
+        public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+            // open your camera here
+            Log.d(TAG, "onSurfaceTextureAvailable");
+            openCamera();
+            // Intent hdmiService = new Intent(RockchipCamera2.this, HdmiService.class);
+            // hdmiService.setPackage(getPackageName());
+            // bindService(hdmiService, conn, Context.BIND_AUTO_CREATE);
+        }
+
+        @Override
+        public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+            Log.d(TAG, "onSurfaceTextureSizeChanged");
+            // Transform you image captured size according to the surface width and height
+        }
+
+        @Override
+        public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+            Log.d(TAG, "onSurfaceTextureDestroyed");
+            return true;
+        }
+
+        @Override
+        public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+            // Log.d(TAG,"onSurfaceTextureUpdated");
+            /*
+             * int width = 0; int height = 0; int[] format = JniCameraCall.getFormat(); if
+             * (format != null && format.length > 0) { width = format[0]; height =
+             * format[1]; } Log.d(TAG,"width = "+width+",height = "+height);
+             */
+
+        }
+    };
+
+    private final CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
+        @Override
+        public void onOpened(CameraDevice camera) {
+            // This is called when the camera is open
+            Log.d(TAG, "onOpened");
+            cameraDevice = camera;
+            createCameraPreview();
+        }
+
+        @Override
+        public void onDisconnected(CameraDevice camera) {
+            Log.d(TAG, "onDisconnected");
+            cameraDevice.close();
+        }
+
+        @Override
+        public void onError(CameraDevice camera, int error) {
+            Log.i(TAG, "onError");
+            cameraDevice.close();
+            cameraDevice = null;
+        }
+    };
+
+    protected void startBackgroundThread() {
+        mBackgroundThread = new HandlerThread("Camera Background");
+        mBackgroundThread.start();
+        mBackgroundHandler = new Handler(mBackgroundThread.getLooper());
+    }
+
+    protected void stopBackgroundThread() {
+        if (null == mBackgroundThread) {
+            return;
+        }
+        mBackgroundThread.quitSafely();
+        try {
+            mBackgroundThread.join();
+            mBackgroundThread = null;
+            mBackgroundHandler = null;
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void createCameraPreview() {
+        try {
+            Log.d(TAG, "createCameraPreview");
+            SurfaceTexture texture = textureView.getSurfaceTexture();
+            assert texture != null;
+            Log.d(TAG, "imageDimension.getWidth()=" + imageDimension.getWidth() + ",imageDimension.getHeight()="
+                    + imageDimension.getHeight());
+            texture.setDefaultBufferSize(imageDimension.getWidth(), imageDimension.getHeight());
+            Surface surface = new Surface(texture);
+            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            captureRequestBuilder.addTarget(surface);
+            cameraDevice.createCaptureSession(Arrays.asList(surface), new CameraCaptureSession.StateCallback() {
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
+                    // The camera is already closed
+                    if (null == cameraDevice) {
+                        return;
+                    }
+                    Log.d(TAG, "onConfigured");
+                    // When the session is ready, we start displaying the preview.
+                    cameraCaptureSessions = cameraCaptureSession;
+                    updatePreview();
+                }
+
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
+                    Log.i(TAG, "onConfigureFailed");
+                    Toast.makeText(MainActivity.this, "Configuration failed", Toast.LENGTH_SHORT).show();
+                }
+            }, null);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void openCamera() {
+        String getHdmiDeviceId = "";
+        try {
+            IHdmi service = IHdmi.getService(true);
+            getHdmiDeviceId = service.getHdmiDeviceId();
+            service.registerListener((IHdmiCallback) mHdmiCallback);
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+
+        CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        Log.i(TAG, "openCamera start");
+        try {
+            if (manager.getCameraIdList().length == 0) {
+                Log.i(TAG, "openCamera length == 0");
+                return;
+            }
+            boolean haveHDMI = false;
+            String hdmiCameraId = "";
+            for (String cameraId : manager.getCameraIdList()) {
+                Log.i(TAG, "cameraId:" + cameraId);
+                if (cameraId.equals(getHdmiDeviceId)) {
+                    haveHDMI = true;
+                    hdmiCameraId = cameraId;
+                    Log.i(TAG, "haveHDMI cameraId:" + cameraId);
+                }
+            }
+            if (!haveHDMI) {
+                return;
+            }
+
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(hdmiCameraId);
+            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            assert map != null;
+            //imageDimension = map.getOutputSizes(SurfaceTexture.class)[0];
+            for (Size size : map.getOutputSizes(SurfaceTexture.class)) {
+                Log.d(TAG, "supported stream size: " + size.toString());
+                imageDimension = size;
+            }
+            mCameraSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+            Log.d(TAG, "current hdmi input size:" + imageDimension.toString() + ", orientation=" + mCameraSensorOrientation);
+            //configureTextureViewTransform(180, textureView.getWidth(), textureView.getHeight());*/
+            manager.openCamera(hdmiCameraId, stateCallback, mBackgroundHandler);
+            Log.v(TAG, "open camera end");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        Log.i(TAG, "openCamera end");
+    }
+
+    private void updatePreview() {
+        if (null == cameraDevice) {
+            Log.e(TAG, "updatePreview error, return");
+        }
+        Log.d(TAG, "updatePreview");
+        captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+        try {
+            cameraCaptureSessions.setRepeatingRequest(captureRequestBuilder.build(), null, mBackgroundHandler);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void closeCamera() {
+        Log.v(TAG, "closeCamera start");
+        if (null != cameraDevice) {
+            cameraDevice.close();
+            cameraDevice = null;
+        }
+        Log.v(TAG, "closeCamera end");
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -614,8 +965,45 @@ public class MainActivity extends Activity implements
     protected void onPause() {
         Log.d(TAG, "onPause");
         super.onPause();
+        pauseCamera();
         pauseSideband();
         stopSidebandRecord(true);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        Log.d(TAG, "onStop");
+        if (isInPictureInPictureMode()) {
+            Log.d(TAG, "onStop inpip");
+            mExitAppWithPip = true;
+        }
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        Log.i(TAG, "onPictureInPictureModeChanged: " + isInPictureInPictureMode);
+        if (mExitAppWithPip) {
+            return;
+        }
+        if (isInPictureInPictureMode) {
+            switchPreviewMode(MODE_CAMERA, 0);
+        } else {
+            switchPreviewMode(MODE_TV, 0);
+        }
+    }
+
+    private void enterPiPMode() {
+        Display display = mWindowManager.getDefaultDisplay();
+        Point size = new Point();
+        display.getRealSize(size);
+        int screenWidth = size.x;
+        int screenHeight = size.y;
+        PictureInPictureParams.Builder mPictureInPictureParamsBuilder = new PictureInPictureParams.Builder();
+        Rational aspectRatio = new Rational(screenWidth, screenHeight);
+        mPictureInPictureParamsBuilder.setAspectRatio(aspectRatio).build();
+        enterPictureInPictureMode(mPictureInPictureParamsBuilder.build());
     }
 
     @Override
@@ -637,7 +1025,9 @@ public class MainActivity extends Activity implements
             String action = intent.getAction();
             Log.v(TAG, action);
             if (Intent.ACTION_CLOSE_SYSTEM_DIALOGS.equals(action)) {
-                exitApp();
+                if (!isInPictureInPictureMode()) {
+                    exitApp();
+                }
             } else if (HDMI_OUT_ACTION.equals(action) || DP_OUT_ACTION.equals(action)) {
                 if (null != mPopSettings && mPopSettings.isShowing()) {
                     mPopSettings.dismiss();

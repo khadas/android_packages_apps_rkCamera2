@@ -60,10 +60,22 @@
             android:text="@string/btn_screenshot" />
 
         <Button
-            android:id="@+id/btn_pq"
+            android:id="@+id/btn_pip"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_below="@+id/btn_screenshot"
+            android:layout_alignLeft="@+id/txt_staus"
+            android:layout_alignRight="@+id/txt_staus"
+            android:layout_marginTop="10dp"
+            android:paddingTop="25dp"
+            android:paddingBottom="25dp"
+            android:text="@string/btn_pip" />
+
+        <Button
+            android:id="@+id/btn_pq"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/btn_pip"
             android:layout_alignLeft="@+id/txt_staus"
             android:layout_alignRight="@+id/txt_staus"
             android:layout_marginTop="10dp"
