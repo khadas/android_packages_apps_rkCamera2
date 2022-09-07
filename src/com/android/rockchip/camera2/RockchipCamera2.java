@@ -82,6 +82,7 @@ public class RockchipCamera2 extends Activity {
     private boolean mPaused = false;
     private String mAssignCameraId;
     private String mAssignCameraType;
+    private boolean mIsDisconnect;
 
     class HdmiCallback extends IHdmiCallback.Stub{
         public  HdmiCallback(){
@@ -89,18 +90,27 @@ public class RockchipCamera2 extends Activity {
 
         public void onConnect(String cameraId) throws RemoteException {
             Log.e(TAG,"onConnect"+cameraId);
-            openCamera();
+            mIsDisconnect = false;
+            if (null == textureView) {
+                createTextureView();
+            } else {
+                openCamera();
+            }
         }
 
         public void onFormatChange(String cameraId,int width,int height) throws RemoteException {
             Log.e(TAG,"onFormatChange"+cameraId);
             closeCamera();
 	    imageDimension = new Size(width, height);
-            openCamera();
+            if (!mIsDisconnect && null != textureView){
+                openCamera();
+            }
         }
 
         public void onDisconnect(String cameraId) throws RemoteException {
             Log.e(TAG,"onDisconnect"+cameraId);
+            mIsDisconnect = true;
+            removeTextureView();
             closeCamera();
         }
     }
@@ -171,6 +181,19 @@ public class RockchipCamera2 extends Activity {
                 textureView.setLayoutParams(layoutParams);
                 rootView.addView(textureView, 0);
                 textureView.setSurfaceTextureListener(textureListener);
+            }
+        });
+    }
+
+    private void removeTextureView() {
+        Log.d(TAG, "removeTextureView");
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (textureView != null) {
+                    rootView.removeView(textureView);
+                    textureView = null;
+                }
             }
         });
     }
@@ -259,8 +282,10 @@ public class RockchipCamera2 extends Activity {
         @Override
         public void onError(CameraDevice camera, int error) {
             Log.i(TAG, "onError");
-            cameraDevice.close();
-            cameraDevice = null;
+            if (null != cameraDevice) {
+                cameraDevice.close();
+                cameraDevice = null;
+            }
         }
     };
 
