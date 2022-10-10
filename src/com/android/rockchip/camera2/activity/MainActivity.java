@@ -567,7 +567,11 @@ public class MainActivity extends Activity implements
             e.printStackTrace();
         } finally {
             if (mediaMetadataRetriever != null) {
-                mediaMetadataRetriever.release();
+                try {
+                    mediaMetadataRetriever.release();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
         }
         return bitmap;
