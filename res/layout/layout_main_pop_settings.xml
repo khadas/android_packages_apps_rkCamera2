@@ -38,14 +38,15 @@
         <Button
             android:id="@+id/btn_record"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="1dp"
             android:layout_below="@+id/btn_edid"
             android:layout_alignLeft="@+id/txt_staus"
             android:layout_alignRight="@+id/txt_staus"
             android:layout_marginTop="10dp"
             android:paddingTop="25dp"
             android:paddingBottom="25dp"
-            android:text="@string/btn_record" />
+            android:text="@string/btn_record"
+            android:visibility="invisible" />
 
         <Button
             android:id="@+id/btn_screenshot"
