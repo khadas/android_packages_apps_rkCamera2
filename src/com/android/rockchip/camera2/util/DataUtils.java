@@ -41,6 +41,8 @@ public class DataUtils {
     public static final int PQ_CACL_LUMA = 2;       //0b00000010;
     public static final int PQ_LF_RANGE = 4;        //0b00000100;
 
+    public static final String PERSIST_HDMIIN_TYPE = "vendor.tvinput.hdmiin.type";
+
     public static void startHdmiAudioService(Context context) {
         Log.v("HdmiIn", "startHdmiAudioService");
         SystemPropertiesProxy.set("vendor.hdmiin.audiorate", "48KHZ");
