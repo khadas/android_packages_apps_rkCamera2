@@ -55,6 +55,7 @@ import com.android.rockchip.camera2.util.DataUtils;
 import com.android.rockchip.camera2.util.JniCameraCall;
 import rockchip.hardware.hdmi.V1_0.IHdmi;
 import rockchip.hardware.hdmi.V1_0.IHdmiCallback;
+import rockchip.hardware.hdmi.V1_0.HdmiStatus;
 
 public class RockchipCamera2 extends Activity {
 
@@ -449,10 +450,22 @@ public class RockchipCamera2 extends Activity {
 
     private void openCamera() {
         String  getHdmiDeviceId= "";
+
         try {
                 IHdmi service = IHdmi.getService(true);
                 getHdmiDeviceId = service.getHdmiDeviceId();
                 service.registerListener((IHdmiCallback)mHdmiCallback);
+                // HdmiStatus status = service.getMipiStatus();
+                // Log.d(TAG,"status:"+status.status);
+                // Log.d(TAG,"width:"+status.width);
+                // Log.d(TAG,"height:"+status.height);
+                // Log.d(TAG,"fps:"+status.fps);
+                HdmiStatus status = service.getHdmiRxStatus();
+                Log.d(TAG,"status:"+status.status);
+                Log.d(TAG,"width:"+status.width);
+                Log.d(TAG,"height:"+status.height);
+                Log.d(TAG,"fps:"+status.fps);
+                imageDimension = new Size((int)status.width,(int)status.height);
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
@@ -515,8 +528,8 @@ public class RockchipCamera2 extends Activity {
             //imageDimension = map.getOutputSizes(SurfaceTexture.class)[0];
             for (Size size : map.getOutputSizes(SurfaceTexture.class)) {
                 Log.d(TAG,"supported stream size: "+size.toString());
-                imageDimension = size;
             }
+
             Log.d(TAG,"current hdmi input size:"+imageDimension.toString());
             manager.openCamera(hdmiCameraId, stateCallback, mBackgroundHandler);
         } catch (CameraAccessException e) {
