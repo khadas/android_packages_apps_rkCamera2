@@ -454,7 +454,6 @@ public class RockchipCamera2 extends Activity {
         try {
                 IHdmi service = IHdmi.getService(true);
                 getHdmiDeviceId = service.getHdmiDeviceId();
-                service.registerListener((IHdmiCallback)mHdmiCallback);
                 // HdmiStatus status = service.getMipiStatus();
                 // Log.d(TAG,"status:"+status.status);
                 // Log.d(TAG,"width:"+status.width);
