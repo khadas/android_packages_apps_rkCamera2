@@ -27,20 +27,6 @@ public class DataUtils {
 
     public static final String STORAGE_PATH_NAME = "hdmiin";
 
-    public static final String PERSIST_HDMIRX_EDID = "persist.sys.hdmirx.edid";
-    public static final String HDMIRX_EDID_1 = "1";
-    public static final String HDMIRX_EDID_2 = "2";
-
-    public static final boolean DEBUG_PQ = false;
-    public static final boolean DEBUG_PQ_MODIFY_CONFIG = true;
-    public static final String PERSIST_RKPQ_ENABLE = "persist.vendor.rkpq.enable";
-    public static final String PERSIST_RKPQ_LUMA = "persist.vendor.rkpq.luma";
-    public static final String PERSIST_RKPQ_RANGE = "persist.vendor.rkpq.range";
-    public static final int PQ_OFF = 0;             //0b00000000;
-    public static final int PQ_NORMAL = 1;          //0b00000001;
-    public static final int PQ_CACL_LUMA = 2;       //0b00000010;
-    public static final int PQ_LF_RANGE = 4;        //0b00000100;
-
     public static final String PERSIST_HDMIIN_TYPE = "vendor.tvinput.hdmiin.type";
 
     public static void startHdmiAudioService(Context context) {

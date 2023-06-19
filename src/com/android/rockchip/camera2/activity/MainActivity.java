@@ -54,7 +54,6 @@ import com.android.rockchip.camera2.R;
 import com.android.rockchip.camera2.util.BitmapUtil;
 import com.android.rockchip.camera2.util.DataUtils;
 import com.android.rockchip.camera2.util.SystemPropertiesProxy;
-import com.android.rockchip.camera2.widget.RoundMenu;
 
 import java.io.DataOutputStream;
 import java.io.File;
@@ -88,16 +87,8 @@ public class MainActivity extends Activity implements
     private TvView tvView;
     private TextureView textureView;
     private PopupWindow mPopSettings;
-    private RoundMenu rm_pop_settings;
-    private TextView txt_hdmirx_edid_1;
-    private TextView txt_hdmirx_edid_2;
-    private Button btn_edid;
     private Button btn_screenshot;
-    private Button btn_record;
     private Button btn_pip;
-    private Button btn_pq;
-    private Button btn_calc_luma;
-    private Button btn_lf_range;
 
     private Object mLock = new Object();
     private Uri mChannelUri;
@@ -109,8 +100,6 @@ public class MainActivity extends Activity implements
     private boolean mIsDestory;
     private long mLastClickTime;
     private String mCurrentSavePath;
-    private boolean mIsSidebandRecord;
-    private int mPqMode = DataUtils.PQ_OFF;
     private WindowManager mWindowManager;
     private PictureInPictureParams.Builder mPictureInPictureParamsBuilder;
     private HdmiCallback mHdmiCallback;
@@ -243,58 +232,16 @@ public class MainActivity extends Activity implements
 
     private void initPopSettingsWindow() {
         View view = LayoutInflater.from(this).inflate(R.layout.layout_main_pop_settings, null, false);
-        rm_pop_settings = (RoundMenu) view.findViewById(R.id.rm_pop_settings);
-        rm_pop_settings.setOnStateListener(new RoundMenu.onStateListener() {
-            @Override
-            public void collapseEnd() {
-                mPopSettings.dismiss();
-            }
-
-            @Override
-            public void centerClick() {
-                if (mIsDestory) {
-                    return;
-                }
-                Log.v(TAG, "centerClick mIsSidebandRecord=" + mIsSidebandRecord);
-                if (mIsSidebandRecord) {
-                    stopSidebandRecord(true);
-                } else {
-                    startSidebandRecord();
-                    rm_pop_settings.setCenterDrawable(R.drawable.ic_record_shutter);
-                }
-                mPopSettings.dismiss();
-            }
-        });
-        rm_pop_settings.setCenterDrawable(R.drawable.ic_record_start);
-        txt_hdmirx_edid_1 = (TextView) view.findViewById(R.id.txt_hdmirx_edid_1);
-        txt_hdmirx_edid_1.setOnClickListener(this);
-        txt_hdmirx_edid_2 = (TextView) view.findViewById(R.id.txt_hdmirx_edid_2);
-        txt_hdmirx_edid_2.setOnClickListener(this);
         mPopSettings = new PopupWindow(view,
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true);
         mPopSettings.setTouchable(true);
         mPopSettings.setBackgroundDrawable(new ColorDrawable(0x00000000));
         mPopSettings.setClippingEnabled(false);
         //normal ui
-        btn_edid = view.findViewById(R.id.btn_edid);
-        btn_edid.setOnClickListener(this);
         btn_screenshot = view.findViewById(R.id.btn_screenshot);
         btn_screenshot.setOnClickListener(this);
-        btn_record = view.findViewById(R.id.btn_record);
-        btn_record.setOnClickListener(this);
         btn_pip = view.findViewById(R.id.btn_pip);
         btn_pip.setOnClickListener(this);
-        btn_pq = view.findViewById(R.id.btn_pq);
-        btn_pq.setOnClickListener(this);
-        btn_calc_luma = view.findViewById(R.id.btn_calc_luma);
-        btn_calc_luma.setOnClickListener(this);
-        btn_lf_range = view.findViewById(R.id.btn_lf_range);
-        btn_lf_range.setOnClickListener(this);
-        if (DataUtils.DEBUG_PQ) {
-            btn_pq.setVisibility(View.VISIBLE);
-            btn_calc_luma.setVisibility(View.VISIBLE);
-            btn_lf_range.setVisibility(View.VISIBLE);
-        }
         mPopSettingsPrepared = false;
     }
 
@@ -381,7 +328,6 @@ public class MainActivity extends Activity implements
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        stopSidebandRecord(true);
         finish();
         try {
             Thread.sleep(100);
@@ -429,119 +375,19 @@ public class MainActivity extends Activity implements
         }
         Log.v(TAG, "onClick " + v);
         mLastClickTime = clickTime;
-        if (txt_hdmirx_edid_1.getId() == v.getId()) {
-            rm_pop_settings.collapse(true);
-            writeHdmiRxEdid(DataUtils.HDMIRX_EDID_1);
-        } else if (txt_hdmirx_edid_2.getId() == v.getId()) {
-            rm_pop_settings.collapse(true);
-            writeHdmiRxEdid(DataUtils.HDMIRX_EDID_2);
-        } else if (btn_edid.getId() == v.getId()) {
-            String hdmiInVersion = SystemPropertiesProxy.getString(DataUtils.PERSIST_HDMIRX_EDID,
-                    DataUtils.HDMIRX_EDID_1);
-            if (DataUtils.HDMIRX_EDID_1.equals(hdmiInVersion)) {
-                writeHdmiRxEdid(DataUtils.HDMIRX_EDID_2);
-            } else if (DataUtils.HDMIRX_EDID_2.equals(hdmiInVersion)) {
-                writeHdmiRxEdid(DataUtils.HDMIRX_EDID_1);
-            }
-            mPopSettings.dismiss();
-        } else if (btn_screenshot.getId() == v.getId()) {
+        if (btn_screenshot.getId() == v.getId()) {
             mPopSettings.dismiss();
             btn_screenshot.setEnabled(false);
             mHandler.removeMessages(MSG_SCREENSHOT_START);
             mHandler.sendEmptyMessageDelayed(MSG_SCREENSHOT_START,
                     DataUtils.MAIN_REQUEST_SCREENSHOT_START_DELAYED);
-        } else if (btn_record.getId() == v.getId()) {
-            if (mIsSidebandRecord) {
-                stopSidebandRecord(true);
-            } else {
-                startSidebandRecord();
-            }
-            mPopSettings.dismiss();
         } else if (btn_pip.getId() == v.getId()) {
             /* already do in onPause
               pauseSideband();
               stopSidebandRecord(true);
             */
             enterPiPMode();
-        } else if (btn_pq.getId() == v.getId()) {
-            int currentPqMode = mPqMode;
-            String value = "";
-            if ((currentPqMode & DataUtils.PQ_NORMAL) == DataUtils.PQ_NORMAL) {
-                currentPqMode &= ~DataUtils.PQ_NORMAL;
-                value = "0";
-                showToast(R.string.btn_pq_stop);
-            } else {
-                currentPqMode |= DataUtils.PQ_NORMAL;
-                value = "1";
-                showToast(R.string.btn_pq_start);
-            }
-            sendPQMode(currentPqMode, DataUtils.PERSIST_RKPQ_ENABLE, value);
-            mPopSettings.dismiss();
-        } else if (btn_calc_luma.getId() == v.getId()) {
-            int currentPqMode = mPqMode;
-            String value = "";
-            if ((currentPqMode & DataUtils.PQ_CACL_LUMA) == DataUtils.PQ_CACL_LUMA) {
-                currentPqMode &= ~DataUtils.PQ_CACL_LUMA;
-                value = "0";
-                showToast(R.string.btn_calc_luma_stop);
-            } else {
-                currentPqMode |= DataUtils.PQ_CACL_LUMA;
-                value = "1";
-                showToast(R.string.btn_calc_luma_start);
-            }
-            sendPQMode(currentPqMode, DataUtils.PERSIST_RKPQ_LUMA, value);
-            mPopSettings.dismiss();
-        } else if (btn_lf_range.getId() == v.getId()) {
-            int currentPqMode = mPqMode;
-            String value = "";
-            if ((currentPqMode & DataUtils.PQ_LF_RANGE) == DataUtils.PQ_LF_RANGE) {
-                currentPqMode &= ~DataUtils.PQ_LF_RANGE;
-                value = "0";
-                showToast(R.string.btn_lf_range_stop);
-            } else {
-                currentPqMode |= DataUtils.PQ_LF_RANGE;
-                value = "1";
-                showToast(R.string.btn_lf_range_start);
-            }
-            sendPQMode(currentPqMode, DataUtils.PERSIST_RKPQ_RANGE, value);
-            mPopSettings.dismiss();
         } else if (mPopSettingsPrepared) {
-            String hdmiInVersion = SystemPropertiesProxy.getString(DataUtils.PERSIST_HDMIRX_EDID,
-                    DataUtils.HDMIRX_EDID_1);
-            if (DataUtils.HDMIRX_EDID_1.equals(hdmiInVersion)) {
-                txt_hdmirx_edid_1.setTextColor(Color.parseColor("#AAAAFF"));
-                txt_hdmirx_edid_2.setTextColor(Color.WHITE);
-                btn_edid.setText("EDID: 340M");
-            } else if (DataUtils.HDMIRX_EDID_2.equals(hdmiInVersion)) {
-                txt_hdmirx_edid_1.setTextColor(Color.WHITE);
-                txt_hdmirx_edid_2.setTextColor(Color.parseColor("#AAAAFF"));
-                btn_edid.setText("EDID: 600M");
-            }
-            if (mIsSidebandRecord) {
-                btn_record.setText("录像:开启中");
-            } else {
-                btn_record.setText("录像:未开启");
-            }
-            if (isInPictureInPictureMode()) {
-                btn_record.setEnabled(false);
-            } else {
-                btn_record.setEnabled(true);
-            }
-            if ((mPqMode & DataUtils.PQ_NORMAL) == DataUtils.PQ_NORMAL) {
-                btn_pq.setText("  PQ:开启中");
-            } else {
-                btn_pq.setText("  PQ:未开启");
-            }
-            if ((mPqMode & DataUtils.PQ_CACL_LUMA) == DataUtils.PQ_CACL_LUMA) {
-                btn_calc_luma.setText("亮度:开启中");
-            } else {
-                btn_calc_luma.setText("亮度:未开启");
-            }
-            if ((mPqMode & DataUtils.PQ_LF_RANGE) == DataUtils.PQ_LF_RANGE) {
-                btn_lf_range.setText("Full:开启中");
-            } else {
-                btn_lf_range.setText("Full:未开启");
-            }
             mPopSettings.showAtLocation(rootView, Gravity.CENTER, 0, 0);
         }
     }
@@ -575,27 +421,6 @@ public class MainActivity extends Activity implements
             }
         }
         return bitmap;
-    }
-
-    private void writeHdmiRxEdid(String value) {
-        FileOutputStream file = null;
-        try {
-            file = new FileOutputStream("sys/class/hdmirx/hdmirx/edid");
-            Log.v(TAG, "write hdmirx edid value " + value);
-            file.write(value.getBytes());
-            file.flush();
-            SystemPropertiesProxy.set(DataUtils.PERSIST_HDMIRX_EDID, value);
-        } catch (Exception e) {
-            showToast("set failed");
-            e.printStackTrace();
-        } finally {
-            if (null != file) {
-                try {
-                    file.close();
-                } catch (Exception e1) {
-                }
-            }
-        }
     }
 
     private boolean execCmd(String cmd) {
@@ -664,49 +489,6 @@ public class MainActivity extends Activity implements
         Intent intent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
         intent.setData(Uri.fromFile(new File(filePath)));
         sendBroadcast(intent);
-    }
-
-    private void sendPQMode(int pqMode, String persistName, String value) {
-        if (mPqMode == pqMode) {
-            return;
-        }
-        Log.v(TAG, "sendPQMode old:" + mPqMode + ", current:" + pqMode);
-        mPqMode = pqMode;
-        if (DataUtils.DEBUG_PQ_MODIFY_CONFIG) {
-            SystemPropertiesProxy.set(persistName, value);
-        } else {
-            Bundle bundle = new Bundle();
-            bundle.putString("status", pqMode == DataUtils.PQ_OFF ? "0" : "1");
-            bundle.putString("mode", String.valueOf(mPqMode));
-            tvView.sendAppPrivateCommand("pq", bundle);
-        }
-    }
-
-    private void startSidebandRecord() {
-        mIsSidebandRecord = true;
-        mCurrentSavePath = getSavePath(".mp4");
-        Bundle bundle = new Bundle();
-        bundle.putString("status", "1");
-        bundle.putString("storePath", mCurrentSavePath);
-        tvView.sendAppPrivateCommand("record", bundle);
-        showToast(R.string.btn_record_start);
-    }
-
-    private void stopSidebandRecord(boolean sendStopCmd) {
-        mIsSidebandRecord = false;
-        if (!TextUtils.isEmpty(mCurrentSavePath)) {
-            if (sendStopCmd) {
-                Bundle bundle = new Bundle();
-                bundle.putString("status", "0");
-                bundle.putString("storePath", "");
-                tvView.sendAppPrivateCommand("record", bundle);
-            }
-            rm_pop_settings.setCenterDrawable(R.drawable.ic_record_start);
-            addSaveFileToDb(mCurrentSavePath);
-            showToast(mCurrentSavePath);
-            mCurrentSavePath = "";
-            Log.v(TAG, "stopSidebandRecord");
-        }
     }
 
     private void registerHdmiCallback() {
@@ -944,21 +726,6 @@ public class MainActivity extends Activity implements
     protected void onResume() {
         super.onResume();
         Log.d(TAG, "onResume");
-        if (DataUtils.DEBUG_PQ) {
-            mPqMode = DataUtils.PQ_OFF;
-            int pq = SystemPropertiesProxy.getInt(DataUtils.PERSIST_RKPQ_ENABLE, 0);
-            if (pq != 0) {
-                mPqMode |= DataUtils.PQ_NORMAL;
-            }
-            int luma = SystemPropertiesProxy.getInt(DataUtils.PERSIST_RKPQ_LUMA, 0);
-            if (luma != 0) {
-                mPqMode |= DataUtils.PQ_CACL_LUMA;
-            }
-            int range = SystemPropertiesProxy.getInt(DataUtils.PERSIST_RKPQ_RANGE, 0);
-            if (range != 0) {
-                mPqMode |= DataUtils.PQ_LF_RANGE;
-            }
-        }
         resumeSideband();
         if (!mPopSettingsPrepared) {
             mHandler.sendEmptyMessageDelayed(MSG_ENABLE_SETTINGS, DataUtils.MAIN_ENABLE_SETTINGS_DEALY);
@@ -971,7 +738,6 @@ public class MainActivity extends Activity implements
         super.onPause();
         pauseCamera();
         pauseSideband();
-        stopSidebandRecord(true);
     }
 
     @Override
@@ -1036,7 +802,6 @@ public class MainActivity extends Activity implements
                 if (null != mPopSettings && mPopSettings.isShowing()) {
                     mPopSettings.dismiss();
                 }
-                stopSidebandRecord(true);
                 mAlreadyTvTune = false;
                 resumeSideband();
             } else if (Intent.ACTION_HDMIIN_RK_PRIV_CMD.equals(action)) {
@@ -1044,9 +809,6 @@ public class MainActivity extends Activity implements
                 Log.v(TAG, "receiver: " + action);
                 if (null != mPopSettings && mPopSettings.isShowing()) {
                     mPopSettings.dismiss();
-                }
-                if ("hdmiinout".equals(action) || "sourcechange".equals(action)) {
-                    stopSidebandRecord(false);
                 }
             }
         }
