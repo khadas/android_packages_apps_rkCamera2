@@ -388,7 +388,7 @@ public class MainActivity extends Activity implements
             */
             enterPiPMode();
         } else if (mPopSettingsPrepared) {
-            mPopSettings.showAtLocation(rootView, Gravity.CENTER, 0, 0);
+            //mPopSettings.showAtLocation(rootView, Gravity.CENTER, 0, 0);
         }
     }
 
@@ -398,7 +398,7 @@ public class MainActivity extends Activity implements
         try {
             Log.v(TAG, "==========start capture=======");
             long timeLimit = 1;
-            int milliTime = 200;
+            int milliTime = 500;
             String cmd = "screenrecord --time-limit " + timeLimit + " --capture-hdmiin " + milliTime + " " + tempPath;
             Process p = Runtime.getRuntime().exec(cmd);
             p.waitFor(timeLimit + 1, TimeUnit.SECONDS);
